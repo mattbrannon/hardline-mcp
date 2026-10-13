@@ -202,8 +202,8 @@
   },
   "lane-consumption-transaction": {
     "file": "hardline_mcp/server.py",
-    "before": "return operation(*args, owned=verify, db_path=db_path, **kwargs)",
-    "after": "return operation(*args, owned=owned, db_path=db_path, **kwargs)",
+    "before": "            owned=verify,\n",
+    "after": "            owned=owned,\n",
     "tests": [
       "tests/test_ownership.py::test_consumption_rechecks_conflict_after_preflight"
     ]
