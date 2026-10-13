@@ -2852,8 +2852,8 @@
   },
   "one-settling-pass-at-a-time": {
     "file": "hardline_mcp/server.py",
-    "before": "    if not _debts or not _settling.acquire(blocking=False):\n",
-    "after": "    if not _debts or not (_settling.acquire(blocking=False) or True):\n",
+    "before": "_settling = threading.Lock()  # one pass at a time; another caller does not wait\n",
+    "after": "_settling = type('Open', (), {'acquire': lambda self, blocking=True: True, 'release': lambda self: None})()\n",
     "tests": [
       "tests/test_server.py::test_one_settling_pass_at_a_time"
     ]
