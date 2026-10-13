@@ -108,36 +108,42 @@ def test_a_registry_missing_a_column_reads_unavailable_even_when_empty(tmp_path)
     assert "no such column: process_key" in str(report.report(db)["processes"])
 
 
-def test_probes_run_once_per_identity_after_the_snapshot_closes(tmp_path, monkeypatch):
-    """No reader is held while processes are probed: a checkpoint completes."""
+def test_probes_run_once_per_identity_after_the_snapshot_closes(tmp_path, monkeypatch, child):
+    """This process is a server, the host of both servers and a legacy writer:
+    probed once. And no connection of the report's is open while it probes."""
     db = tmp_path / "mb.db"
-    sessions.register(agent="codex", lane="codex:a", host_pid=7, host_key="h", db_path=db)
-    sessions.register(agent="codex", lane="codex:b", pid=8, host_pid=7, host_key="h", db_path=db)
+    me = procid.current_identity()
+    host = {"host_pid": me[0], "host_key": me[1]}
+    sessions.register(agent="codex", lane="codex:a", **host, db_path=db)
+    sessions.register(agent="codex", lane="codex:b", pid=child[0], **host, db_path=db)
     raw = sqlite3.connect(db)
-    with raw:  # the same process in the legacy registry too
+    with raw:
         raw.execute("CREATE TABLE sessions (pid INTEGER, lane TEXT, process_key TEXT)")
-        raw.execute("INSERT INTO sessions VALUES (?, 'codex:a', ?)", procid.current_identity())
+        raw.execute("INSERT INTO sessions VALUES (?, 'codex:a', ?)", me)
     raw.close()
-    # Held open, so closing the last connection does not checkpoint the WAL
-    # away: the report's reader then pins frames a checkpoint has to wait for.
-    keeper = sqlite3.connect(db)
-    mailbox.send("a", "b", "c", db_path=db)
-    probed: Counter = Counter()
-    busy = []
+    opened, probed = [], Counter()
+    connect = sqlite3.connect
+
+    def tracked(*args, **kwargs):
+        opened.append(connect(*args, **kwargs))
+        return opened[-1]
+
+    def still_open(conn):
+        try:
+            conn.in_transaction
+        except sqlite3.ProgrammingError:  # closed
+            return False
+        return True
 
     def probe(pid, key):
+        assert not any(map(still_open, opened)), "probed with the snapshot open"
         probed[(pid, key)] += 1
-        writer = sqlite3.connect(db, timeout=0.1)
-        busy.append(writer.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0])
-        writer.close()
-        mailbox.send("a", "b", "c", db_path=db)  # new frames for the next probe
         return procid.ALIVE
 
+    monkeypatch.setattr(report.sqlite3, "connect", tracked)
     monkeypatch.setattr(report, "instance_state", probe)
     report.report(db)
-    keeper.close()
-    assert probed and set(probed.values()) == {1}
-    assert busy and set(busy) == {0}
+    assert opened and set(probed) == {me, child} and set(probed.values()) == {1}
 
 
 def test_the_audit_never_writes(tmp_path):
