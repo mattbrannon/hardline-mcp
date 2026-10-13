@@ -490,3 +490,45 @@ def test_additive_identity_migration_keeps_old_writers_compatible(tmp_path):
     )
     assert watch.read_pending(target) is False
     assert sessions.holders("codex:legacy", db_path=db)[0]["host_pid"] is None
+
+
+_PRE_IDENTITY_SCHEMA = mailbox._SCHEMA.replace("    owner_key    TEXT,\n", "").replace(
+    "    host_pid    INTEGER,\n    host_key    TEXT,\n", ""
+)
+
+
+def _rebuilt_by_an_older_revision(db):
+    """The store is deleted under the fleet and an older revision rebuilds it
+    first: populated, so a process that initialized the old file skips it."""
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            os.remove(f"{db}{suffix}")
+        except FileNotFoundError:
+            pass
+    with sqlite3.connect(db) as conn:
+        conn.executescript(_PRE_IDENTITY_SCHEMA)
+        conn.execute("INSERT INTO messages(sender,recipient,body,created_at) VALUES('a','b','c','t')")
+    conn.close()
+
+
+def test_a_cached_process_survives_an_older_revisions_rebuild(tmp_path):
+    db = tmp_path / "mb.db"
+    assert sessions.register(agent="codex", lane="codex:one", db_path=db)["ok"]
+    _rebuilt_by_an_older_revision(db)
+
+    try:
+        registered = sessions.register(agent="codex", lane="codex:one", db_path=db)["ok"]
+    except sqlite3.OperationalError as exc:  # the defect: "no such column: host_pid"
+        registered = exc
+    assert registered is True
+    assert jobs.get(create(db), db_path=db)["owner_key"] == procid.process_key(os.getpid())
+
+
+def test_a_store_initialization_cannot_repair_fails_where_it_is_opened(tmp_path, monkeypatch):
+    db = tmp_path / "mb.db"
+    mailbox.send("a", "b", "c", db_path=db)
+    _rebuilt_by_an_older_revision(db)
+    monkeypatch.setattr(mailbox, "_add_missing_columns", lambda conn: None)
+
+    with pytest.raises(sqlite3.OperationalError, match="still lacks columns"):
+        mailbox.send("a", "b", "c", db_path=db)

@@ -224,7 +224,10 @@ test-specific store; never restore an operator path inside a test.
 is two statements with no transaction between them, and under this deployment
 another process can build the correct table in that window and have it
 destroyed. Give the new shape a new table name and let the old one rot. That is
-why the session table is `agent_sessions`.
+why the session table is `agent_sessions`. A nullable column may be added
+instead, through `mailbox._ADDED_COLUMNS` only: initialization adds it, and
+`_connect` checks for it on every connection, because a store an older revision
+rebuilt lacks it while this process's initialization is cached (#67).
 
 **SQLite specifics.** WAL is a persistent DB-header property — set it once per
 file, not per connection. A consuming read must take `BEGIN IMMEDIATE`, because
