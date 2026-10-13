@@ -57,8 +57,8 @@
   },
   "completion-store": {
     "file": "hardline_mcp/server.py",
-    "before": "if not jobs.mark_running(job_id, db_path=db_path)",
-    "after": "if not jobs.mark_running(job_id)",
+    "before": "started = jobs.mark_running(job_id, db_path=db_path)",
+    "after": "started = jobs.mark_running(job_id)",
     "tests": [
       "tests/test_completion.py::test_worker_retains_dispatch_store"
     ]
@@ -210,8 +210,8 @@
   },
   "cancel-retains-routing": {
     "file": "hardline_mcp/server.py",
-    "before": "                    routing=request.get(\"routing\"),",
-    "after": "                    routing=None,",
+    "before": "                routing=request.get(\"routing\"),",
+    "after": "                routing=None,",
     "tests": [
       "tests/test_admission.py::test_queued_cancellation_admits_replacement_while_worker_is_busy"
     ]
@@ -483,7 +483,7 @@
   },
   "codex-async-cancel-keeps-resolution": {
     "file": "hardline_mcp/server.py",
-    "before": "                    model_resolution=request.get(\"model_resolution\"),\n",
+    "before": "                model_resolution=request.get(\"model_resolution\"),\n",
     "after": "",
     "tests": [
       "tests/test_admission.py::test_queued_cancellation_admits_replacement_while_worker_is_busy"
@@ -2776,6 +2776,78 @@
     "after": "        if (pid_, key_) not in asked:\n",
     "tests": [
       "tests/test_sessions.py::test_an_answer_that_would_grant_is_asked_again_inside_the_writer"
+    ]
+  },
+  "a-refused-finish-is-kept": {
+    "file": "hardline_mcp/server.py",
+    "before": "        _owe(db_path, job_id, functools.partial(jobs.finish, job_id, result=result, db_path=db_path))\n        return result\n",
+    "after": "        try:\n            jobs.finish(job_id, result=result, db_path=db_path)\n        except Exception:\n            traceback.print_exc()\n        return result\n",
+    "tests": [
+      "tests/test_server.py::test_a_refused_finish_is_paid_on_the_next_look_at_the_job"
+    ]
+  },
+  "a-look-at-a-job-pays-its-debt": {
+    "file": "hardline_mcp/server.py",
+    "before": "    _settle_debts()\n    return jobs.get(job_id)\n",
+    "after": "    return jobs.get(job_id)\n",
+    "tests": [
+      "tests/test_server.py::test_a_refused_finish_is_paid_on_the_next_look_at_the_job"
+    ]
+  },
+  "a-poll-pays-debts-unthrottled": {
+    "file": "hardline_mcp/server.py",
+    "before": "    _settle_debts()\n    now = time.monotonic()\n",
+    "after": "    now = time.monotonic()\n",
+    "tests": [
+      "tests/test_server.py::test_the_next_poll_pays_a_debt_before_reading"
+    ]
+  },
+  "the-wake-cycle-pays-debts": {
+    "file": "hardline_mcp/server.py",
+    "before": "    _settle_debts()\n    if _registration_failure:\n",
+    "after": "    if _registration_failure:\n",
+    "tests": [
+      "tests/test_server.py::test_an_idle_session_pays_its_debts_on_its_wake_cycle"
+    ]
+  },
+  "an-unclaimable-job-never-runs": {
+    "file": "hardline_mcp/server.py",
+    "before": "            _fail_unstarted(db_path, job_id, failed)\n            return failed\n",
+    "after": "            started = True\n",
+    "tests": [
+      "tests/test_server.py::test_a_job_that_cannot_be_claimed_fails_without_running"
+    ]
+  },
+  "an-unstarted-failure-finishes-whatever-the-claim-said": {
+    "file": "hardline_mcp/server.py",
+    "before": "        jobs.mark_running(job_id, db_path=db_path)\n        jobs.finish(job_id, result=result, db_path=db_path)\n",
+    "after": "        if jobs.mark_running(job_id, db_path=db_path):\n            jobs.finish(job_id, result=result, db_path=db_path)\n",
+    "tests": [
+      "tests/test_server.py::test_a_claim_that_committed_and_then_raised_still_ends"
+    ]
+  },
+  "a-refusal-stops-the-pass": {
+    "file": "hardline_mcp/server.py",
+    "before": "            _debt_refused_at[:] = [time.monotonic()]\n            return\n",
+    "after": "            _debt_refused_at[:] = [time.monotonic()]\n            continue\n",
+    "tests": [
+      "tests/test_server.py::test_a_store_still_down_costs_one_refusal_per_rest"
+    ]
+  },
+  "a-refusal-rests": {
+    "file": "hardline_mcp/server.py",
+    "before": "        _debt_refused_at and time.monotonic() - _debt_refused_at[0] < _DEBT_REST_S\n",
+    "after": "        False\n",
+    "tests": [
+      "tests/test_server.py::test_a_store_still_down_costs_one_refusal_per_rest"
+    ]
+  },
+  "a-settled-debt-is-removed-only-if-unreplaced": {
+    "file": "hardline_mcp/server.py",
+    "before": "            if _debts.get(key) is write:\n",
+    "after": "            if key in _debts:\n",
+    "tests": [
+      "tests/test_server.py::test_a_debt_replaced_while_it_was_retried_is_kept"
     ]
   }
 }

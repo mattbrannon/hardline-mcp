@@ -136,6 +136,74 @@ def _track_job(db_path: Path, job_id: str, future: Future, slots) -> None:
     future.add_done_callback(finished)
 
 
+# A job's terminal write the store refused. Its result exists only here until
+# that write lands, so it is retried from this process's own polls, job
+# lookups and wake cycles (``_settle_debts``) and is lost only if the process
+# exits first, when the job reads ``lost``. Bounded by the jobs in flight when
+# the store failed, since admitting a job needs the store too.
+_debts: dict[tuple[Path, str], Callable[[], object]] = {}
+_debts_lock = threading.Lock()
+_debt_refused_at: list[float] = []
+_DEBT_REST_S = 5.0
+
+
+def _owe(db_path: Path, job_id: str, write: Callable[[], object]) -> None:
+    """Run a job's terminal write, keeping it to retry if the store refuses.
+
+    Every write owed here is safe to repeat: ``jobs.finish`` matches only a
+    row still owed a result, so a retry after a write that committed and then
+    raised changes nothing."""
+    try:
+        write()
+    except Exception:  # noqa: BLE001 - kept, retried by _settle_debts
+        traceback.print_exc()
+        with _debts_lock:
+            _debts[(db_path, job_id)] = write
+
+
+def _fail_unstarted(db_path: Path, job_id: str, result: dict) -> None:
+    """Record ``result`` for a job whose agent never ran: queued -> running ->
+    terminal, or onto the cancellation that got there first. Neither step runs
+    the agent, and ``finish`` follows whatever ``mark_running`` answered,
+    because an earlier attempt may have committed the claim and then raised."""
+
+    def write() -> None:
+        jobs.mark_running(job_id, db_path=db_path)
+        jobs.finish(job_id, result=result, db_path=db_path)
+
+    _owe(db_path, job_id, write)
+
+
+def _settle_debts() -> None:
+    """Retry owed writes, oldest first. The first refusal stops the pass and
+    rests ``_DEBT_REST_S``: a store still down costs one busy wait per rest,
+    not one per debt per poll. A settled debt is removed only if it is still
+    the one that ran."""
+    if not _debts or (
+        _debt_refused_at and time.monotonic() - _debt_refused_at[0] < _DEBT_REST_S
+    ):
+        return
+    with _debts_lock:
+        owed = list(_debts.items())
+    for key, write in owed:
+        try:
+            write()
+        except Exception:  # noqa: BLE001 - still owed
+            _debt_refused_at[:] = [time.monotonic()]
+            return
+        with _debts_lock:
+            if _debts.get(key) is write:
+                del _debts[key]
+    _debt_refused_at.clear()
+
+
+def _settled_job(job_id: str) -> dict | None:
+    """A job as the store has it, once anything this process owes it is paid:
+    asking about a job is when its owed result matters most."""
+    _settle_debts()
+    return jobs.get(job_id)
+
+
 def _cancelled_result(
     job_id: str, *, label=None, routing=None, model_resolution=None
 ) -> dict:
@@ -169,16 +237,14 @@ def _retire_cancelled_jobs() -> None:
         job = jobs.get(job_id, db_path=db_path)
         if job and job["state"] == jobs.CANCELLED and future.cancel():
             request = job.get("request") or {}
-            jobs.finish(
+            cancelled = _cancelled_result(
                 job_id,
-                db_path=db_path,
-                result=_cancelled_result(
-                    job_id,
-                    label=job["label"],
-                    routing=request.get("routing"),
-                    model_resolution=request.get("model_resolution"),
-                ),
+                label=job["label"],
+                routing=request.get("routing"),
+                model_resolution=request.get("model_resolution"),
             )
+            # The future is cancelled now, so nothing else will write this.
+            _owe(db_path, job_id, functools.partial(jobs.finish, job_id, result=cancelled, db_path=db_path))
 
 
 def _shorten(msg: dict, cap: int) -> dict:
@@ -392,8 +458,10 @@ def _heartbeat() -> None:
     Registration is one small UPDATE and this is throttled in memory, so a poll
     costs a clock read almost every time. The exception is the case it exists
     for: a store rebuilt underneath the fleet, where this is what puts everyone
-    back on the map without waiting for them to restart.
+    back on the map without waiting for them to restart. Owed job writes are
+    retried on every poll, unthrottled: they rest on their own.
     """
+    _settle_debts()
     now = time.monotonic()
     if _last_heartbeat and now - _last_heartbeat[-1] < _HEARTBEAT_S:
         return
@@ -468,8 +536,10 @@ def _regain_lanes() -> list[str]:
     at startup because its previous holder had not exited yet, it was retried
     only by a tool call, so an idle session never woke for its own mail. Both
     checks are memory until there is something to retry: an idle poll stays a
-    reader.
+    reader. Job writes the store refused go first, so a session idle until its
+    result's notice wakes it is not waiting on a notice nothing will write.
     """
+    _settle_debts()
     if _registration_failure:
         _announce_self()
     return _fulfil_pending()
@@ -1426,7 +1496,7 @@ async def job_status(job_id: str) -> dict:
     lost. ``lost`` is resolved here rather than written by the process that
     died — it means the owner exited without recording a terminal state.
     """
-    job = await _in_thread(jobs.get, job_id)
+    job = await _in_thread(_settled_job, job_id)
     if job is None:
         return {"ok": False, "error": f"no job {job_id!r}"}
     return {"ok": True, "job": job}
@@ -1440,7 +1510,7 @@ async def job_result(job_id: str) -> dict:
     Reading or acknowledging that notice does not remove the result. Lost or
     cancelled jobs may have no result; inspect the returned state and error.
     """
-    job = await _in_thread(jobs.get, job_id)
+    job = await _in_thread(_settled_job, job_id)
     if job is None:
         return {"ok": False, "error": f"no job {job_id!r}"}
     if job["state"] not in jobs.TERMINAL_STATES:
@@ -2180,17 +2250,28 @@ def _ask_async_impl(
         # kill this pool thread silently, mailbox.send would never run, and
         # a caller polling inbox(from_agent) would wait forever with no
         # error ever surfacing anywhere.
-        if not jobs.mark_running(job_id, db_path=db_path):
+        try:
+            started = jobs.mark_running(job_id, db_path=db_path)
+        except Exception as exc:  # noqa: BLE001
+            # Whether a cancel landed first is unknowable now, so the agent is
+            # not run on a guess: the job fails, and says why.
+            failed = {
+                "ok": False,
+                "error": f"could not start: {type(exc).__name__}: {exc}",
+                "job_id": job_id,
+            }
+            if label is not None:
+                failed["label"] = label
+            _fail_unstarted(db_path, job_id, failed)
+            return failed
+        if not started:
             # The queued -> running claim failed, which means a cancel landed
             # first. Spawning anyway would run the whole expensive call while
             # the row said cancelled - the one outcome a cancel must prevent.
             cancelled = _cancelled_result(
                 job_id, label=label, routing=routing, model_resolution=resolution
             )
-            try:
-                jobs.finish(job_id, result=cancelled, db_path=db_path)
-            except Exception:  # noqa: BLE001 - notification is best effort
-                traceback.print_exc()
+            _owe(db_path, job_id, functools.partial(jobs.finish, job_id, result=cancelled, db_path=db_path))
             return cancelled
         try:
             ask_kwargs = dict(
@@ -2233,10 +2314,7 @@ def _ask_async_impl(
         if label is not None:
             result["label"] = label
         result["job_id"] = job_id
-        try:
-            jobs.finish(job_id, result=result, db_path=db_path)
-        except Exception:  # storage failure leaves neither a result nor a false notice
-            traceback.print_exc()
+        _owe(db_path, job_id, functools.partial(jobs.finish, job_id, result=result, db_path=db_path))
         return result
 
     try:
@@ -2246,8 +2324,7 @@ def _ask_async_impl(
         result = {"ok": False, "error": f"could not submit async job: {exc}"}
         if resolution:
             result["model_resolution"] = resolution
-        if jobs.mark_running(job_id, db_path=db_path):
-            jobs.finish(job_id, result=result, db_path=db_path)
+        _fail_unstarted(db_path, job_id, result)
         return {**result, "accepted": False, "dispatched": False, "job_id": job_id}
     _track_job(db_path, job_id, future, slots)
     _retire_cancelled_jobs()
