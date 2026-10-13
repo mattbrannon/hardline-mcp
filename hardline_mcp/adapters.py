@@ -45,6 +45,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -190,6 +191,15 @@ _CODEX_NO_CONNECTORS = ["-c", "features.apps=false", "-c", "features.plugins=fal
 # sandbox identity every Codex session shares, which the next session to start
 # - the user's own included - reconciles to its own list.
 #
+# Off Windows the same profile pin applies, with nothing to choose: Codex
+# enforces a profile through bubblewrap on Linux (a denied directory under an
+# empty tmpfs, a denied file under /dev/null) and Seatbelt on macOS (denials
+# carved out of every allow rule), per process. tests/test_live_sandbox.py
+# measures it on Linux and macOS in CI; GitHub's Windows runners have no
+# native MXC, so Windows is measured locally. One difference, measured: a
+# read-only workdir inside a denied directory reads under MXC and Seatbelt,
+# while bubblewrap leaves it unreadable, so the preflight refuses that call.
+#
 # Codex 0.161.0's elevated sandbox refused to start any command while the Codex
 # desktop app ran its computer-use runtime (#47, openai/codex#51590). Before
 # each command its setup refresh opens every file under
@@ -209,23 +219,24 @@ _CODEX_DECOY_LOCALAPPDATA = Path.home() / ".cache" / "hardline-mcp" / "no-locala
 _ON_WINDOWS = os.name == "nt"  # module-level, so tests need not patch os.name
 
 
-class _WindowsSandbox(NamedTuple):
+class _CodexSandbox(NamedTuple):
     overrides: list[str]  # Codex -c arguments
     env: dict[str, str]  # laid over the child's environment
     profile: bool = False  # pinned through a permission profile that denies reads
 
 
-def _codex_windows_sandbox() -> _WindowsSandbox:
-    """The Windows sandbox a spawned Codex runs in: nothing off Windows or on
-    ``inherit``, a profile pin under MXC, and the decoy only for the elevated
+def _codex_sandbox() -> _CodexSandbox:
+    """The sandbox a spawned Codex runs in: a profile pin off Windows and
+    under MXC, nothing on ``inherit``, and the decoy only for the elevated
     sandbox with a real, TOML-expressible LOCALAPPDATA to give its commands
     back.
 
-    Raises ValueError on an unknown value, so a typo is a configuration error
-    rather than a silent fall back to whatever the host config says.
+    Raises ValueError on an unknown HARDLINE_CODEX_WINDOWS_SANDBOX, so a typo
+    is a configuration error rather than a silent fall back to whatever the
+    host config says.
     """
     if not _ON_WINDOWS:
-        return _WindowsSandbox([], {})
+        return _CodexSandbox([], {}, profile=True)
     raw = os.environ.get("HARDLINE_CODEX_WINDOWS_SANDBOX", "").strip().lower()
     value = raw or _CODEX_WINDOWS_SANDBOX_DEFAULT
     if value not in _CODEX_WINDOWS_SANDBOXES:
@@ -234,18 +245,55 @@ def _codex_windows_sandbox() -> _WindowsSandbox:
             f"{', '.join(_CODEX_WINDOWS_SANDBOXES)}; got {raw!r}"
         )
     if value == "inherit":
-        return _WindowsSandbox([], {})
+        return _CodexSandbox([], {})
     overrides = ["-c", f'windows.sandbox="{value}"']
     if value == "mxc":
-        return _WindowsSandbox(overrides, {}, profile=True)
+        return _CodexSandbox(overrides, {}, profile=True)
     real = os.environ.get("LOCALAPPDATA")
     restored = _toml_basic_string(real) if real else None
     if value != "elevated" or restored is None:
-        return _WindowsSandbox(overrides, {})
-    return _WindowsSandbox(
+        return _CodexSandbox(overrides, {})
+    return _CodexSandbox(
         overrides + ["-c", f"shell_environment_policy.set.LOCALAPPDATA={restored}"],
         {"LOCALAPPDATA": str(_CODEX_DECOY_LOCALAPPDATA)},
     )
+
+
+# What a reviewer still uses from a Codex home: the instructions and skills it
+# reads, the sandbox's helper binaries, and the scratch space its shell's
+# apply_patch alias lives in (tmp/arg0). `.sandbox` is not among them: the
+# elevated sandbox logs command lines there.
+_CODEX_HOME_READABLE = frozenset(
+    {"AGENTS.md", "AGENTS.override.md", "skills", ".sandbox-bin", "tmp", ".tmp"}
+)
+
+
+def _codex_home_entries(codex_home: Path) -> list[Path]:
+    """A Codex home's entries but ``_CODEX_HOME_READABLE``. It holds
+    credentials, transcripts, logs, dictation, memories and state databases
+    under names that change between releases, so they are listed at call
+    time, not named; the known secrets are named too, in case they appear.
+
+    One more is left out: Codex's provisioning guard, a lock file, since MXC
+    refuses to start over a denial of a file another process holds open
+    exclusively (0x80070020, measured on 0.162.1). A home that cannot be
+    listed raises ValueError: denying only the known names would abandon the
+    rest unannounced.
+    """
+    try:
+        present = sorted(os.listdir(codex_home))
+    except FileNotFoundError:
+        present = []
+    except OSError as exc:
+        raise ValueError(f"cannot pin Codex's sandbox: cannot list {codex_home}: {exc}") from exc
+    known = [".env", "auth.json", "config.toml", "sessions", "archived_sessions", "history.jsonl"]
+    return [
+        codex_home / name
+        for name in dict.fromkeys(known + present)
+        if name not in _CODEX_HOME_READABLE
+        and not (name.startswith(".codex-provisioning-") and name.endswith(".guard")
+                 and (codex_home / name).is_file())
+    ]
 
 
 def _codex_unreadable(env: dict[str, str]) -> list[Path]:
@@ -254,38 +302,40 @@ def _codex_unreadable(env: dict[str, str]) -> list[Path]:
     token, hardline's mail, and SSH keys.
 
     Every home that may hold them is named, not the one in use: a relocated
-    Claude home does not prove the default one empty. A Codex home of the
-    child's own (advisory's copy of auth.json) is denied beside the user's.
+    Claude or Codex home does not prove the default one empty. A Codex home of
+    the child's own (advisory's copy of auth.json) is denied beside the
+    user's.
     """
     home = Path.home()
     store = mailbox._resolve_db(None)
-    appdata = os.environ.get("APPDATA")
-    gh_home = os.environ.get("GH_CONFIG_DIR") or (
-        Path(appdata) / "GitHub CLI" if appdata else home / ".config" / "gh"
+    gh_homes = dict.fromkeys(
+        Path(base) / leaf
+        for base, leaf in (
+            (os.environ.get("GH_CONFIG_DIR"), ""),
+            (os.environ.get("XDG_CONFIG_HOME"), "gh"),
+            (os.environ.get("APPDATA"), "GitHub CLI"),
+            (home / ".config", "gh"),
+        )
+        if base
     )
     claude_homes = dict.fromkeys(
         [home / ".claude", Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude")]
     )
     codex_homes = dict.fromkeys(
-        Path(source.get("CODEX_HOME") or home / ".codex") for source in (os.environ, env)
+        [home / ".codex", *(Path(s["CODEX_HOME"]) for s in (os.environ, env) if s.get("CODEX_HOME"))]
     )
     return [
         *claude_homes,
         home / ".claude.json",
-        *(
-            codex_home / name
-            for codex_home in codex_homes
-            for name in (".env", "auth.json", "config.toml", "sessions",
-                         "archived_sessions", "history.jsonl")
-        ),
-        Path(gh_home),
+        *(entry for codex_home in codex_homes for entry in _codex_home_entries(codex_home)),
+        *gh_homes,
         home / ".cache" / "hardline-mcp",
         *(store.with_name(store.name + suffix) for suffix in ("", "-wal", "-shm")),
         home / ".ssh",
     ]
 
 
-def _codex_pin(sandbox: _WindowsSandbox, write: bool, env: dict, cwd: str | None) -> list[str]:
+def _codex_pin(sandbox: _CodexSandbox, write: bool, env: dict, cwd: str | None) -> list[str]:
     """The sandbox a spawned Codex is held to: read-only unless ``write``.
 
     Passed on every call, never inherited: with nothing passed, a host whose
@@ -295,7 +345,9 @@ def _codex_pin(sandbox: _WindowsSandbox, write: bool, env: dict, cwd: str | None
     each path under its literal and its resolved spelling (a junction is two
     names for one directory), keeping ``cwd`` readable (writable for
     ``write``) when it lies inside a denied directory: the most specific entry
-    wins.
+    wins. A path under a missing directory is denied as that directory, the
+    topmost one missing: MXC refuses to start over a denial whose parent does
+    not exist (measured on 0.162.1).
 
     The profile's name is new on every call. Codex deep-merges configuration
     layers, so a table any layer gave a known name - a trusted project's
@@ -308,7 +360,7 @@ def _codex_pin(sandbox: _WindowsSandbox, write: bool, env: dict, cwd: str | None
     if not sandbox.profile:
         return ["--sandbox", "workspace-write" if write else "read-only"]
     spellings = dict.fromkeys(
-        spelling
+        next((above for above in reversed(spelling.parents) if not above.exists()), spelling)
         for path in _codex_unreadable(env)
         for spelling in (Path(os.path.abspath(path)), path.resolve())
     )
@@ -320,7 +372,7 @@ def _codex_pin(sandbox: _WindowsSandbox, write: bool, env: dict, cwd: str | None
     entries = []
     for path, mode in access.items():
         key = _toml_basic_string(str(path))
-        if key is None or "[" in str(path) or "]" in str(path):
+        if key is None or any(glob in str(path) for glob in "[]*?"):
             raise ValueError(f"cannot pin Codex's sandbox: cannot give Codex {str(path)!r} exactly")
         entries.append(f'{key}="{mode}"')
     name = f"hardline-{secrets.token_hex(8)}"
@@ -331,17 +383,62 @@ def _codex_pin(sandbox: _WindowsSandbox, write: bool, env: dict, cwd: str | None
     ]
 
 
-def _codex_sandbox_started(exe: str, overrides: list[str], env: dict, cwd: str | None, on_spawn=None) -> dict:
-    """The run of one empty command under ``overrides`` - the very sandbox and
-    pin the call will use - through ``codex sandbox``, in the child's own
-    environment and directory, under ``on_spawn``. Never cached (about 0.5 s).
+# Run by the preflight inside the call's own sandbox: the workdir must list and
+# no denied path may open - the canary first, a file hardline has just opened,
+# so a policy that denies nothing cannot pass for want of targets. Opening
+# reads nothing.
+_CODEX_POLICY_PROBE = """\
+import os, sys
+def opens(path):
+    try:
+        os.listdir(path) if os.path.isdir(path) else open(path, "rb").close()
+        return True
+    except OSError:
+        return False
+workdir, *denied = sys.argv[1:]
+if not opens(workdir):
+    sys.exit(f"cannot read the workdir {workdir}")
+held = [path for path in denied if opens(path)]
+if held:
+    sys.exit("denied paths still open: " + ", ".join(held))
+"""
 
-    The only sign that MXC works here: where Windows cannot provide it,
-    ``codex exec`` starts none of its commands and records no failed command
-    either, so the turn would read as a finished review that read nothing.
+
+def _codex_canary() -> Path:
+    """A file under hardline's own cache, which every pin denies, that the
+    preflight must fail to open: positive evidence the denials hold, down to
+    a file inside a denied directory."""
+    canary = Path.home() / ".cache" / "hardline-mcp" / "sandbox-canary"
+    canary.parent.mkdir(parents=True, exist_ok=True)
+    canary.write_text("hardline sandbox canary\n", encoding="utf-8")
+    return canary
+
+
+def _codex_sandbox_started(exe: str, overrides: list[str], env: dict, cwd: str | None, on_spawn=None) -> dict:
+    """The run of hardline's own Python under ``overrides`` - the very sandbox
+    and pin the call will use - through ``codex sandbox``, in the child's own
+    environment and directory, under ``on_spawn``: proof that the policy holds
+    before a model turn is spent. Never cached (about 0.5 s).
+
+    It proves what holds, not what was passed. Where Windows cannot provide
+    MXC, ``codex exec`` starts none of its commands and records no failed
+    command either. Managed requirements, local or cloud, can swap a profile
+    they do not allow for one without the denials: the profile is named with
+    ``--permission-profile`` and ``--include-managed-config`` so this loads
+    what ``codex exec`` loads, cloud bundle included. On Linux, bubblewrap
+    leaves a read-only workdir inside a denied directory unreadable. Each
+    would otherwise read as a finished review.
     """
+    profile = [o.split("=", 1)[1].strip('"') for o in overrides if o.startswith("default_permissions=")]
+    managed = ["--permission-profile", profile[0], "--include-managed-config"] if profile else []
+    try:
+        denied = [str(_codex_canary())]
+        denied += [str(path) for path in _codex_unreadable(env) if path.exists()]
+    except (OSError, ValueError) as exc:
+        return {"ok": False, "error": f"cannot prepare the sandbox check: {exc}"}
     return _run_cmd(
-        [exe, "sandbox", *overrides, "--", "cmd.exe", "/d", "/c", "exit 0"],
+        [exe, "sandbox", *managed, *overrides, "--",
+         sys.executable, "-I", "-c", _CODEX_POLICY_PROBE, cwd or ".", *denied],
         env=_agent_env(env),
         cwd=cwd,
         timeout_s=_CODEX_ISOLATION_TIMEOUT_S,
@@ -1772,7 +1869,7 @@ def validate_request(
         # Here, before a family model is resolved through `codex debug models`
         # or an async job admitted: a typo must spawn nothing.
         try:
-            _codex_windows_sandbox()
+            _codex_sandbox()
         except ValueError as exc:
             return {"ok": False, "error": str(exc)}, None
     error, resolved = _validate_workdir_write(name, mode, workdir, write)
@@ -2351,7 +2448,7 @@ def _ask_codex_validated(
     # has run.
     try:
         _timeout_for("codex")
-        sandbox = _codex_windows_sandbox()
+        sandbox = _codex_sandbox()
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
     argv += sandbox.overrides
@@ -2393,7 +2490,7 @@ def _ask_codex_structured(
     write: bool,
     on_spawn: "Callable[[int], None] | None",
     attachment: dict | None,
-    sandbox: _WindowsSandbox,
+    sandbox: _CodexSandbox,
 ) -> dict:
     """The telemetry path; ``argv`` is the resolved ``codex exec --ephemeral``
     with ``sandbox``'s overrides."""
@@ -2465,10 +2562,14 @@ def _ask_codex_structured(
             if not started.get("ok"):
                 return {
                     "ok": False,
-                    "error": "Codex's MXC sandbox started no command here "
-                    f"({started.get('error') or 'no reason given'}); "
-                    "HARDLINE_CODEX_WINDOWS_SANDBOX=elevated runs the elevated "
-                    "sandbox, which denies no reads",
+                    "error": f"Codex's {'MXC ' if _ON_WINDOWS else ''}sandbox does not hold "
+                    f"this call's policy here ({started.get('error') or 'no reason given'})"
+                    + (
+                        "; HARDLINE_CODEX_WINDOWS_SANDBOX=elevated runs the elevated "
+                        "sandbox, which denies no reads"
+                        if _ON_WINDOWS
+                        else ""
+                    ),
                     "sandbox": "refused",
                 }
         argv += pin

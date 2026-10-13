@@ -40,9 +40,8 @@ so hardline pins read-only (workspace-write for `write=True`) through a
 profile that also keeps the reviewer out of your secrets
 ([below](#what-a-codex-reviewer-can-read)). Where Windows cannot provide MXC,
 `codex exec` starts none of the reviewer's commands and records no failed
-command either, so each call first runs one empty command through
-`codex sandbox` with the call's own sandbox and pin (about half a second) and
-refuses the call if it does not start. Choose `elevated` on such a machine.
+command either, so the call's preflight refuses it. Choose `elevated` on such
+a machine.
 
 `elevated`, and `unelevated` (upstream's fallback, whose isolation is weaker,
 especially for the network), are pinned with `--sandbox` and deny nothing.
@@ -68,33 +67,87 @@ an elevated sandbox from Codex's own configuration still fails this way.
 
 ### What a Codex reviewer can read
 
-Codex's read-only sandbox reads the whole user profile: its setup grants the
-sandbox's users read access across it. A reviewer can therefore read Claude
-Code's credentials and transcripts, Codex's own sessions, SSH keys and
+Codex's read-only sandbox reads your whole home: on Windows its setup grants
+the sandbox's users read access across the profile, and on Linux and macOS
+`:read-only` reads the whole filesystem. A reviewer could therefore read
+Claude Code's credentials and transcripts, Codex's own sessions, SSH keys and
 hardline's mailbox, and whatever a command reads can reach the model.
 
-Under the MXC default, no command of a hardline-spawned Codex can read:
+So hardline pins every Codex it spawns through a permission profile that
+denies these. Codex enforces the profile through bubblewrap on Linux,
+Seatbelt on macOS, and MXC (the default) on Windows. No command of a
+hardline-spawned Codex can read:
 - Claude Code's homes (`~/.claude`, and `CLAUDE_CONFIG_DIR` when set) and
   `~/.claude.json`: credentials, transcripts, settings;
-- Codex's `.env`, `auth.json`, `config.toml`, `sessions`, `archived_sessions`
-  and `history.jsonl`, in your Codex home and in advisory mode's temporary one;
-- gh's configuration (`GH_CONFIG_DIR`, else `%APPDATA%\GitHub CLI`), where its
-  token may live;
+- Codex's home: `~/.codex`, `CODEX_HOME` when set, and advisory mode's
+  temporary copy. Every entry is denied except `AGENTS.md`, `skills`, the
+  sandbox's helper binaries (`.sandbox-bin`) and scratch space (`tmp`, `.tmp`,
+  where the shell's `apply_patch` alias lives). Besides `auth.json` and
+  transcripts, the home holds logs, dictation, memories and state databases.
+  The elevated sandbox also logs command lines under `.sandbox`. These names
+  change between releases, so entries are listed at each call, and a home
+  that cannot be listed refuses the call. Codex's provisioning `.guard` file
+  is also left out, since MXC cannot start over a denial of a file another
+  process holds open exclusively;
+- gh's configuration, where its token may live: `GH_CONFIG_DIR`,
+  `$XDG_CONFIG_HOME/gh`, `%APPDATA%\GitHub CLI` and `~/.config/gh`, each that
+  applies;
 - hardline's store: `~/.cache/hardline-mcp`, and `HARDLINE_DB` with its
   journal files wherever it points;
 - `~/.ssh`, so no git-over-SSH inside a reviewer.
 
 Each path is denied under its own spelling and its resolved one, so a
-junction does not open a second way in.
+junction or symlink does not open a second way in. A path under a missing
+directory is denied as the topmost missing directory, since MXC refuses to
+start over a denial whose parent does not exist.
 
-The denial is per call. MXC holds it inside the reviewer's process and changes
-no file's permissions, so your own Codex sessions, full-access ones included,
-are untouched. A workdir inside a denied directory stays readable (writable
-with `write=True`): Codex's most specific entry wins, so a reviewer of
-`~/.claude/skills` reads its workdir and nothing else under `~/.claude`. A
-denied directory itself stays denied as a workdir. Measured on Codex 0.162.0:
-a denied directory refused while its sibling read, a workdir inside one read,
-a write refused, and a missing denied path not created.
+The denial is per call. The sandbox holds it inside the reviewer's process
+and changes no file's permissions, so your own Codex sessions, full-access ones
+included, are untouched. A workdir inside a denied directory stays readable
+(writable with `write=True`): Codex's most specific entry wins, so a reviewer
+of `~/.claude/skills` reads its workdir and nothing else under `~/.claude`.
+On Linux, bubblewrap leaves a read-only workdir there unreadable, so such a
+call is refused. A denied directory itself stays denied as a workdir.
+
+**The preflight checks the policy that holds, not the one passed.** Before
+every call, hardline's own Python runs once through `codex sandbox` under the
+call's exact sandbox and pin, in its workdir (about half a second). Managed
+requirements, local and cloud, are loaded as `codex exec` loads them. The
+probe must list the workdir, and no denied path may open; opening reads
+nothing. One of those paths is a canary that hardline has just written under
+its own denied cache, so a policy that denies nothing cannot pass for want of
+targets. Otherwise the call is refused. That catches each of these:
+- Windows without MXC, where `codex exec` would start no command and report
+  none failed;
+- managed requirements that reject hardline's profile and swap in one
+  without the denials;
+- the Linux workdir above;
+
+each of which would otherwise read as a finished review. The preflight and
+the call are separate processes, so the check is of the configuration as it
+stood half a second earlier.
+`tests/test_live_sandbox.py` checks all of this against Codex 0.162.1 with
+dummy secrets only. It runs in CI on Linux and macOS, and on a Windows 11
+host, since GitHub's Windows runners have no native MXC. Real `ask_codex`
+runs, read-only and `write=True`, were also checked on that host.
+
+What the denial does not cover:
+- **Credentials in the environment.** `GH_TOKEN`, `GITHUB_TOKEN` and API keys
+  in hardline's environment reach the reviewer, since the denial covers files
+  only.
+- **Paths that appear mid-call.** A secret created after the call starts may
+  be readable: bubblewrap masks a missing path only under a writable root.
+- **The workdir and writable roots inside a denied directory.** The workdir,
+  and `TMPDIR` under `write=True`, are opened again there with everything
+  beneath them, because the most specific entry wins.
+- **Content Codex itself loads.** Codex reads its skills, rules and
+  instructions outside the sandbox. The denial binds the reviewer's commands,
+  not the Codex host.
+
+A deny profile routes Codex's own file operations (AGENTS.md, apply_patch)
+through a sandboxed helper process whose answer Codex awaits with no timeout
+(openai/codex#53537). One run in ten hung that way once, on 0.162.0. Until
+upstream bounds it, `HARDLINE_CODEX_TIMEOUT_S` is what ends such a call.
 
 The profile gets a new random name on every call. Codex deep-merges its
 configuration layers, so a `[permissions.<name>]` table in any of them - a
@@ -222,7 +275,7 @@ available execution metadata:
 
 | Mode | Codex | Claude |
 | --- | --- | --- |
-| Default (`write=False`) | Explicit read-only sandbox (on Windows, an MXC profile that also denies secrets); ephemeral session. | Denies Edit/Write/NotebookEdit and discards user settings; Bash remains available. |
+| Default (`write=False`) | Explicit read-only sandbox, as a permission profile that also denies secrets (under MXC on Windows); ephemeral session. | Denies Edit/Write/NotebookEdit and discards user settings; Bash remains available. |
 | `mode="advisory"` | Fresh neutral workspace and temporary config/auth home; read-only sandbox and fixed developer instructions. | Fresh neutral workspace; tools, slash commands, project customizations, and persistence disabled. |
 | `write=True` | `workspace-write` sandbox with approvals disabled. | Full tool access with `bypassPermissions`. |
 
