@@ -19,7 +19,10 @@ recorded (`acked_by`), so its misdelivery trigger can be checked.
 `sessions` table; current code uses `agent_sessions` and consults both for
 ownership. That closes this side only: an older process will not read the new
 table whatever we write. It resolves itself as old processes exit, and the
-orphan `sessions` table can be dropped once none remain.
+orphan `sessions` table can be dropped once none remain. `hardline-mcp report`
+shows the revisions registered servers run and any live legacy writer; a
+process that never registers stays invisible, so an empty answer is evidence,
+not proof.
 
 **A record without a creation token is honoured on pid liveness alone.** Every
 platform reads one now (macOS since #69), but rows written before that, or

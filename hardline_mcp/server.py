@@ -363,6 +363,10 @@ def _announce_locked(agent: str, lane: str) -> str | None:
         _registration_failure[:] = [f"{type(exc).__name__}: {exc}"]
         return None
     _registration_failure.clear()
+    try:
+        sessions.record_revision(_code_revision())
+    except Exception as exc:  # noqa: BLE001 - a diagnostic must never be the failure
+        channel._log(f"revision not recorded: {type(exc).__name__}: {exc}")
     # A name granted automatically has moved on as surely as a claimed one:
     # any hint for it, which only claims write, is stale.
     if derived := adapters.derived_lane_suffix():

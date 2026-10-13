@@ -74,7 +74,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
-from .mailbox import _connect, _default_now, _iso, _resolve_db
+from .mailbox import PROCESS_REVISIONS_TABLE, _connect, _default_now, _iso, _resolve_db
 from .procid import ALIVE, DEAD, UNKNOWN, current_identity, instance_state, process_key
 
 
@@ -160,6 +160,43 @@ def _prune_dead(conn: sqlite3.Connection) -> None:
             " AND process_key IS ? AND host_pid IS ? AND host_key IS ?",
             dead,
         )
+        # A revision lives as long as its process's registry rows.
+        conn.execute(PROCESS_REVISIONS_TABLE)
+        conn.execute(
+            "DELETE FROM process_revisions WHERE NOT EXISTS (SELECT 1 FROM agent_sessions s"
+            " WHERE s.pid = process_revisions.pid AND s.process_key = process_revisions.process_key)"
+        )
+
+
+def record_revision(revision: Optional[str], *, db_path: Optional[Path] = None) -> None:
+    """This process runs ``revision``. Nothing is recorded without a revision
+    or an identity token to key it by; an unchanged row is left untouched, so
+    the heartbeat that calls this takes no writer to say nothing new."""
+    pid, key = current_identity()
+    if not revision or key is None:
+        return
+    with closing(_connect(_resolve_db(db_path))) as conn:
+        conn.execute(PROCESS_REVISIONS_TABLE)
+        if conn.execute(
+            "SELECT 1 FROM process_revisions WHERE pid = ? AND process_key = ? AND revision = ?",
+            (pid, key, revision),
+        ).fetchone():
+            return
+        with conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO process_revisions VALUES (?, ?, ?)", (pid, key, revision)
+            )
+
+
+def _revisions(conn: sqlite3.Connection) -> dict[tuple, str]:
+    """Recorded revisions by (pid, process_key); none in a store without the table."""
+    try:
+        rows = conn.execute("SELECT pid, process_key, revision FROM process_revisions")
+    except sqlite3.OperationalError as exc:
+        if "no such table" not in str(exc):
+            raise
+        return {}
+    return {(pid, key): revision for pid, key, revision in rows}
 
 
 def _live_work(conn: sqlite3.Connection, lane: str) -> list[dict]:
@@ -513,7 +550,12 @@ def live(
         # Re-check rather than trust the prune: a session can exit between the
         # DELETE and the SELECT, and reporting a destination that has just gone
         # is the failure this module exists to remove.
-        return _group([r for r in rows if _is_live(r)])
+        sessions = _group([r for r in rows if _is_live(r)])
+        revisions = _revisions(conn)
+        for session in sessions:
+            # None: an older revision, or a process with no identity token.
+            session["revision"] = revisions.get((session["pid"], session["process_key"]))
+        return sessions
 
 
 def holders(lane: str, *, db_path: Optional[Path] = None) -> list[dict]:

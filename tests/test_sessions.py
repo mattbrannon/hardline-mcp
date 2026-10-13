@@ -2141,3 +2141,27 @@ async def test_list_agents_tells_an_unaddressable_session_how_to_register(
     # only those two passes even when nothing was ever recorded and no other
     # session could actually reach this one.
     assert "codex:construction" in {s["lane"] for s in listing["live_sessions"]}
+
+
+def test_a_live_session_names_its_recorded_revision_until_it_dies(tmp_path, monkeypatch):
+    db = tmp_path / "mb.db"
+    sessions.register(agent="codex", lane="codex:a", db_path=db)
+    sessions.record_revision("abc123", db_path=db)
+    assert [s["revision"] for s in sessions.live(db_path=db)] == ["abc123"]
+
+    monkeypatch.setattr(sessions, "instance_state", lambda pid, key: procid.DEAD)
+    assert sessions.live(db_path=db) == []
+    raw = sqlite3.connect(db)
+    assert raw.execute("SELECT COUNT(*) FROM process_revisions").fetchone()[0] == 0
+    raw.close()
+
+
+@pytest.mark.anyio
+async def test_list_agents_names_the_revision_each_server_runs(codex_session, monkeypatch):
+    from hardline_mcp import server
+
+    monkeypatch.setattr(server, "_code_revision", lambda: "rev-under-test")
+    await server.register_session(label="construction")
+    listing = await server.list_agents()
+    (mine,) = [s for s in listing["live_sessions"] if s["pid"] == os.getpid()]
+    assert mine["revision"] == "rev-under-test"

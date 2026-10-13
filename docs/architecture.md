@@ -210,7 +210,8 @@ Revisit when any of these holds:
 - contested names or the claim cap block real claims;
 - recorded provenance shows misdelivery (see "Who acked a message" below);
 - every writer that predates `agent_sessions` has been retired, the
-  precondition for any change of recipient format.
+  precondition for any change of recipient format. `hardline-mcp report`
+  shows registered evidence only; retirement needs a controlled restart.
 
 Review record (gpt-6-astra), adopted:
 - **"The instance address already exists" was rejected.** A reproducible,
@@ -243,6 +244,17 @@ a different acker there is a difference to interpret, not a verdict.
 This records consumption, not readership. A consuming read commits before its
 response reaches the caller, and `job_result`, `peek` and `history` show
 content without acknowledging it.
+
+`hardline-mcp report` reads both triggers' evidence from a store, read-only.
+It counts acked job notices as `same_instance`, `other_instance` (with a
+newest-first sample carrying both identities and timestamps) or `unknown`, and
+lists the revision each registered server runs (`process_revisions`, keyed by
+identity so a reused pid cannot inherit one) beside any live writer of the
+legacy `sessions` table. It reads in one snapshot, through `mode=ro`, and
+never initializes or prunes. Its review (gpt-6-astra) rejected two shortcuts:
+a `revision` column on `agent_sessions`, which an older revision's update of a
+reused pid's row would carry over, and reading through `mailbox._connect`,
+which initializes the store it is asked about.
 
 Review record (gpt-6-astra), on a larger first design that also snapshotted a
 lane's holders at send time:

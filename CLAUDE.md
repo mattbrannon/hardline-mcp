@@ -16,6 +16,7 @@ python -m pytest tests/test_sessions.py -q      # one module
 python -m pytest "tests/test_identity.py::test_verified_owner_token_survives_later_probe_failure" -q
 python -m pytest -q -rs -n auto                 # full suite, as CI runs it
 python scripts/mutate.py [case ...] [--jobs N]  # regression mutations (tests/mutations.json)
+hardline-mcp report [--db PATH]                 # read-only audit of a store (report.py)
 ```
 
 No linter or formatter is configured. CI (`.github/workflows/ci.yml`) runs three
@@ -30,7 +31,7 @@ blocks waiting for input.
 Dependencies point one way: `procid` <- `mailbox` <- `jobs`/`sessions` <-
 `watch` <- `server`.
 
-- `cli.py` picks the subcommand (serve / `watch` / `watch-codex`) *before*
+- `cli.py` picks the subcommand (serve / `watch` / `watch-codex` / `report`) *before*
   importing anything heavy, so the watchers never load `mcp` or `websockets`
   unless they need them.
 - `server.py` is **the only module that imports `mcp`**. Everything else is pure
@@ -75,6 +76,12 @@ Dependencies point one way: `procid` <- `mailbox` <- `jobs`/`sessions` <-
   (`lane_hints`), so a relaunched or reconnected conversation is told about
   its old names and their mail. Advice only: it never claims, routes or reads.
   See `docs/session-continuity.md`.
+- `report.py` audits a store read-only (`mode=ro`, one snapshot, never
+  `mailbox._connect`): which revisions the registered servers run (recorded
+  in `process_revisions`, keyed by process identity), whether the legacy
+  `sessions` table still has live writers, and who acked each job notice
+  against who dispatched the job. Evidence, not verdicts: see
+  `docs/architecture.md`, "Who acked a message".
 
 Design rationale is in `docs/architecture.md`. The tool contracts are in
 `docs/messaging.md`, env vars (`HARDLINE_*`) in `docs/configuration.md`, and
