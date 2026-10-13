@@ -224,19 +224,25 @@ Review record (gpt-6-astra), adopted:
 while nothing recorded who read what. Each acknowledgement on current code now
 records its process (pid and creation token) and the Claude conversation its
 server was started for, in `message_acks`, inside the acknowledging
-transaction; `peek` reports it as `acked_by`. Only an ack that took effect is
-recorded. No row for an acked message means an older revision acked it, which
-is unknown, not a match.
+transaction, so an ack and its record commit or roll back together; `peek`
+reports it as `acked_by`, reading both from one snapshot. Only an ack that
+took effect is recorded. An acked message with no record was acked without
+one (by an older revision): unknown, not a match.
 
 That makes the documented failure checkable: a job's notice is meant for the
 process that dispatched the job (`jobs.owner_pid`, `owner_key`; the notice body
-names the job), so a notice acked by another instance is a result read
-elsewhere. Its conversation tells a relaunch of the same Claude conversation
-from a different one, as a correlation: the id is the one the server was
-started under, and two windows can share it. Ordinary mail has no recorded
-intent, so a different acker there is a difference to interpret, not a verdict.
-An ack is not receipt either: a consuming read commits before its response
-reaches the caller.
+names the job), so a notice acked by another instance is a notice consumed
+elsewhere. Whether that was a relaunch of the same Claude conversation takes
+interpretation: the job stores no conversation, only its requester lane, which
+for a lane derived from a conversation carries the id's first eight
+characters; the recorded conversation is the acker's, the one its server was
+started under, and two windows can share it. A missing creation token (macOS)
+proves nothing about two equal pids. Ordinary mail has no recorded intent, so
+a different acker there is a difference to interpret, not a verdict.
+
+This records consumption, not readership. A consuming read commits before its
+response reaches the caller, and `job_result`, `peek` and `history` show
+content without acknowledging it.
 
 Review record (gpt-6-astra), on a larger first design that also snapshotted a
 lane's holders at send time:

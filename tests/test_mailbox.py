@@ -120,10 +120,77 @@ def test_an_ack_nothing_recorded_reads_unknown(tmp_path, monkeypatch):
     got = mailbox.peek(old["message_id"], db_path=db)
     assert (got["acked_at"], got["acked_by"]) == ("then", None)
 
-    new = mailbox.send("codex", "hermes", "acked by current code", db_path=db)
+    read = mailbox.send("codex", "hermes", "read by current code", db_path=db)
     _acker(monkeypatch, 43)
     mailbox.inbox("hermes", db_path=db)
-    assert mailbox.peek(new["message_id"], db_path=db)["acked_by"]["pid"] == 43
+    assert mailbox.peek(read["message_id"], db_path=db)["acked_by"]["pid"] == 43
+
+    raw = sqlite3.connect(str(db))
+    with raw:
+        raw.execute("DROP TABLE message_acks")
+    raw.close()
+    acked = mailbox.send("codex", "hermes", "acked by current code", db_path=db)
+    assert mailbox.ack(acked["message_id"], db_path=db)["ok"]
+    assert mailbox.peek(acked["message_id"], db_path=db)["acked_by"]["pid"] == 43
+
+
+def test_peek_reads_an_ack_and_its_acker_from_one_snapshot(tmp_path, monkeypatch):
+    """An ack committed between peek's look for the table and its read of the
+    message must not show up as an ack nobody recorded."""
+    import sqlite3
+
+    db = tmp_path / "mb.db"
+    sent = mailbox.send("codex", "hermes", "x", db_path=db)
+    raw = sqlite3.connect(str(db))
+    with raw:
+        raw.execute("DROP TABLE message_acks")
+
+    def ack_elsewhere():
+        with raw:
+            raw.execute(mailbox.MESSAGE_ACKS_TABLE)
+            raw.execute("UPDATE messages SET acked_at = 'now' WHERE id = ?", (sent["message_id"],))
+            raw.execute("INSERT INTO message_acks VALUES (?, 7, 'token-7', NULL)", (sent["message_id"],))
+
+    class Interleaved:
+        def __init__(self, conn):
+            self._conn = conn
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+        def execute(self, sql, *args):
+            cursor = self._conn.execute(sql, *args)
+            if "sqlite_master" in sql:
+                ack_elsewhere()
+            return cursor
+
+    connect = mailbox._connect
+    monkeypatch.setattr(mailbox, "_connect", lambda path: Interleaved(connect(path)))
+    got = mailbox.peek(sent["message_id"], db_path=db)
+    raw.close()
+    assert (got["acked_at"] is None) == (got["acked_by"] is None), got
+
+
+@pytest.mark.parametrize("consume", ["inbox", "ack"])
+def test_an_ack_and_its_record_commit_together(tmp_path, monkeypatch, consume):
+    import sqlite3
+
+    db = tmp_path / "mb.db"
+    sent = mailbox.send("codex", "hermes", "x", db_path=db)
+    record = mailbox._record_acks
+
+    def recorded_then_failed(*args):
+        record(*args)
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(mailbox, "_record_acks", recorded_then_failed)
+    with pytest.raises(sqlite3.OperationalError):
+        if consume == "inbox":
+            mailbox.inbox("hermes", db_path=db)
+        else:
+            mailbox.ack(sent["message_id"], db_path=db)
+    got = mailbox.peek(sent["message_id"], db_path=db)
+    assert (got["acked_at"], got["acked_by"]) == (None, None)
 
 
 def test_ack_is_idempotent(tmp_path):

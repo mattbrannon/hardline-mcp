@@ -713,25 +713,32 @@ def senders(*, db_path: Optional[Path] = None) -> list[str]:
 def peek(message_id: int, *, db_path: Optional[Path] = None) -> Optional[dict]:
     """One message by id, or None. Lets a caller check who a message belongs
     to before acting on it (see ``ack``'s lane guard), and who acked it:
-    ``acked_by`` is None while unread, and for an ack an older revision made.
+    ``acked_by`` is None while unread, and for an ack nothing recorded (an
+    older revision's).
 
-    One query, so the ack and its acker are read from one snapshot."""
+    One read transaction, so the ack, its acker and whether the table exists
+    at all come from one snapshot: deciding that from a failed query and
+    reading again let an ack committed in between read as unrecorded. A store
+    an older revision rebuilt has no table until current code acks in it, and
+    a read does not create it."""
     db_path = _resolve_db(db_path)
     with closing(_connect(db_path)) as conn:
+        conn.execute("BEGIN")
         try:
+            recorded = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'message_acks'"
+            ).fetchone()
             row = conn.execute(
                 "SELECT m.*, a.pid AS by_pid, a.process_key AS by_key,"
                 " a.conversation AS by_conversation"
                 " FROM messages m LEFT JOIN message_acks a ON a.message_id = m.id"
-                " WHERE m.id = ?",
+                " WHERE m.id = ?"
+                if recorded
+                else "SELECT * FROM messages WHERE id = ?",
                 (message_id,),
             ).fetchone()
-        except sqlite3.OperationalError as exc:
-            # A store an older revision rebuilt, where nothing has been acked
-            # by current code since. A read does not create the table.
-            if "no such table: message_acks" not in str(exc):
-                raise
-            row = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+        finally:
+            conn.rollback()
         if row is None:
             return None
         acked = "by_pid" in row.keys() and row["by_pid"] is not None
@@ -755,8 +762,9 @@ def ack(
     db_path: Optional[Path] = None,
     now_fn: Callable[[], datetime] = _default_now,
 ) -> dict:
-    """Mark one message read, as acked by this process (see ``inbox``). Returns ``{"ok": True}`` only if a still-unread
-    message with that id existed (idempotent: a second ack returns False).
+    """Mark one message read, as acked by this process (see ``inbox``).
+    Returns ``{"ok": True}`` only if a still-unread message with that id
+    existed (idempotent: a second ack returns False).
 
     ``lane_suffix`` is this process's session lane, or empty when it has
     none. Unqualified recipients stay shared and ackable by anyone, so
