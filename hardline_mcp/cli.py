@@ -19,9 +19,13 @@ def main(argv: list[str] | None = None) -> None:
         from .wake_codex import main as wake
 
         raise SystemExit(wake(args[1:]))
+    elif args[0] == "report":
+        from .report import main as report
+
+        raise SystemExit(report(args[1:]))
     elif args in (["-h"], ["--help"]):
         print(
-            "Usage: hardline-mcp [watch | watch-codex] [OPTIONS]\n\n"
+            "Usage: hardline-mcp [watch | watch-codex | report] [OPTIONS]\n\n"
             "Omit COMMAND to serve MCP over stdio. Use COMMAND --help for options."
         )
     else:

@@ -45,7 +45,7 @@ def _resolve_db(db_path: Optional[Path]) -> Path:
 # Bumped when a table is added or a column's meaning changes. Recorded in
 # `meta` so a running server can report what store it is talking to rather
 # than leaving "is this the new schema?" to be inferred from behaviour.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Facts a serving process records about its own channel pushes; readers derive
 # the delivery state (see ``delivery``). Also created by ``delivery`` on use: a
@@ -96,7 +96,23 @@ CREATE TABLE IF NOT EXISTS message_acks (
 );
 """
 
-_SCHEMA = PUSH_DELIVERY_TABLE + LANE_HINTS_TABLE + MESSAGE_ACKS_TABLE + """
+# The code revision each registered server was spawned from: its HEAD at
+# import (server._code_revision), so a dirty tree reads as its HEAD. Keyed by
+# the process's identity, not stored on its lane rows, where an older revision
+# updating a reused pid's row would inherit a newer process's revision. Lives
+# as long as the process's registry rows (sessions._prune_dead), created on use.
+PROCESS_REVISIONS_TABLE = """
+CREATE TABLE IF NOT EXISTS process_revisions (
+    pid         INTEGER NOT NULL,
+    process_key TEXT NOT NULL,
+    revision    TEXT NOT NULL,
+    PRIMARY KEY (pid, process_key)
+);
+"""
+
+_SCHEMA = (
+    PUSH_DELIVERY_TABLE + LANE_HINTS_TABLE + MESSAGE_ACKS_TABLE + PROCESS_REVISIONS_TABLE
+) + """
 CREATE TABLE IF NOT EXISTS messages (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     sender     TEXT NOT NULL,
