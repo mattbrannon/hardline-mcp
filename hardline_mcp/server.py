@@ -131,6 +131,12 @@ def _track_job(db_path: Path, job_id: str, future: Future, slots) -> None:
     def finished(_future):
         with _pending_jobs_lock:
             _pending_jobs.pop(key, None)
+        # A result the store has not taken is still work in flight: its slot
+        # is freed when the debt is paid, so admission bounds debts as well.
+        with _debts_lock:
+            if key in _debts:
+                _debt_slots[key] = slots
+                return
         slots.release()
 
     future.add_done_callback(finished)
@@ -138,12 +144,13 @@ def _track_job(db_path: Path, job_id: str, future: Future, slots) -> None:
 
 # A job's terminal write the store refused. Its result exists only here until
 # that write lands, so it is retried from this process's own polls, job
-# lookups and wake cycles (``_settle_debts``) and is lost only if the process
-# exits first, when the job reads ``lost``. Bounded by the jobs in flight when
-# the store failed, since admitting a job needs the store too.
+# lookups and wake cycles (``_settle_debts``). It is lost only if the process
+# exits first, when the job reads ``lost``, or if the store loses the job.
 _debts: dict[tuple[Path, str], Callable[[], object]] = {}
+_debt_slots: dict[tuple[Path, str], threading.BoundedSemaphore] = {}
 _debts_lock = threading.Lock()
-_debt_refused_at: list[float] = []
+_settling = threading.Lock()  # one pass at a time; another caller does not wait
+_debt_rest_until = [0.0]  # monotonic; written only while _settling is held
 _DEBT_REST_S = 5.0
 
 
@@ -152,7 +159,7 @@ def _owe(db_path: Path, job_id: str, write: Callable[[], object]) -> None:
 
     Every write owed here is safe to repeat: ``jobs.finish`` matches only a
     row still owed a result, so a retry after a write that committed and then
-    raised changes nothing."""
+    raised changes nothing, and none of them runs an agent."""
     try:
         write()
     except Exception:  # noqa: BLE001 - kept, retried by _settle_debts
@@ -175,26 +182,38 @@ def _fail_unstarted(db_path: Path, job_id: str, result: dict) -> None:
 
 
 def _settle_debts() -> None:
-    """Retry owed writes, oldest first. The first refusal stops the pass and
-    rests ``_DEBT_REST_S``: a store still down costs one busy wait per rest,
-    not one per debt per poll. A settled debt is removed only if it is still
-    the one that ran."""
-    if not _debts or (
-        _debt_refused_at and time.monotonic() - _debt_refused_at[0] < _DEBT_REST_S
-    ):
+    """Pay owed writes, oldest first, one pass at a time.
+
+    The first refusal ends the pass, sends that debt to the back of the line
+    and rests ``_DEBT_REST_S``: a store still down costs one busy wait per
+    rest, and a debt that keeps failing cannot hold up the ones behind it. A
+    paid debt is removed only if it is still the one that ran, and frees its
+    admission slot."""
+    if not _debts or not _settling.acquire(blocking=False):
         return
-    with _debts_lock:
-        owed = list(_debts.items())
-    for key, write in owed:
-        try:
-            write()
-        except Exception:  # noqa: BLE001 - still owed
-            _debt_refused_at[:] = [time.monotonic()]
+    try:
+        if time.monotonic() < _debt_rest_until[0]:
             return
         with _debts_lock:
-            if _debts.get(key) is write:
-                del _debts[key]
-    _debt_refused_at.clear()
+            owed = list(_debts.items())
+        for key, write in owed:
+            try:
+                write()
+            except Exception:  # noqa: BLE001 - still owed
+                with _debts_lock:
+                    if _debts.get(key) is write:
+                        _debts[key] = _debts.pop(key)
+                _debt_rest_until[0] = time.monotonic() + _DEBT_REST_S
+                return
+            with _debts_lock:
+                paid = _debts.get(key) is write
+                if paid:
+                    del _debts[key]
+                slots = _debt_slots.pop(key, None) if paid else None
+            if slots is not None:
+                slots.release()
+    finally:
+        _settling.release()
 
 
 def _settled_job(job_id: str) -> dict | None:
