@@ -209,5 +209,4 @@ host exit ends its session's lane ownership even if its MCP child remains alive.
 Such records remain in `live_sessions` and block takeover. Watchers require
 verified bindings and report unavailable targets instead of signaling an
 uncertain owner. Legacy rows without tokens retain their earlier PID-based
-behavior. macOS currently lacks creation-token support, so instance-bound
-watching and identity verification are limited there.
+behavior, including rows macOS wrote before it could read a token.

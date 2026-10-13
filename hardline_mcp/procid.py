@@ -18,6 +18,7 @@ creation-time token beside it and compare before acting.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import sys
@@ -147,8 +148,11 @@ def pid_alive(pid: Optional[int]) -> bool:
     # kill(pid, 0) succeeds for a ZOMBIE, which is dead but unreaped. Treating
     # one as alive would keep everything it owns pinned as active indefinitely.
     if _MACOS:
-        info = _darwin_info(pid)
-        return info is None or info.status != _SZOMB
+        try:
+            _darwin_info(pid)
+        except ProcessLookupError:
+            return False  # signalable, yet no process left to describe: a zombie
+        return True
     state = _proc_state_linux(pid)
     return state != "Z"
 
@@ -156,11 +160,9 @@ def pid_alive(pid: Optional[int]) -> bool:
 class _DarwinInfo(NamedTuple):
     ppid: int
     name: str
-    status: int
     start: str  # "seconds:microseconds", ordered like Windows' high:low words
 
 
-_SZOMB = 5  # <sys/proc.h>
 _PROC_PIDTBSDINFO = 3  # <sys/proc_info.h>
 _libproc_cache: list = []
 
@@ -169,9 +171,11 @@ def _darwin_info(pid: int) -> Optional[_DarwinInfo]:
     """What Linux reads from ``/proc/<pid>/stat``, from ``proc_pidinfo``.
 
     One ``proc_bsdinfo`` carries the start time (the creation token), the
-    parent, the name and the zombie state, so every macOS probe here asks
-    once. None where the call is refused (another user's process) or the
-    process is gone; callers treat that exactly as an unreadable ``/proc``.
+    parent and the name, so every macOS probe here asks once. None where the
+    call is refused (another user's process); callers treat that exactly as
+    an unreadable ``/proc``. Raises ProcessLookupError (ESRCH) for a process
+    with nothing left to describe - gone, or a zombie, which macOS refuses
+    rather than reporting its state - so a zombie still answers ``kill(0)``.
     """
     import ctypes
 
@@ -207,12 +211,13 @@ def _darwin_info(pid: int) -> Optional[_DarwinInfo]:
     size = ctypes.sizeof(info)
     # A short answer is a refusal, not a struct to read fields from.
     if _libproc_cache[0].proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, ctypes.byref(info), size) != size:
+        if ctypes.get_errno() == errno.ESRCH:
+            raise ProcessLookupError(pid)
         return None
     return _DarwinInfo(
         ppid=info.ppid,
         # `name` is empty unless the process set one; `comm` is the executable.
         name=(info.name or info.comm).decode("utf-8", "replace"),
-        status=info.status,
         start=f"{info.start_tvsec}:{info.start_tvusec}",
     )
 

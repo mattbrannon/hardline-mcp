@@ -107,8 +107,8 @@ until somebody asks. No heartbeat thread, no TTL, no reaper.
 
 **A pid is not an identity.** A pid is reused once its process exits, so every
 durable record pairs it with a creation-time token (`procid.process_key`) and
-compares before acting. macOS cannot read one yet (see `TODO.md`). Killing or trusting on a bare pid means killing or
-trusting a stranger.
+compares before acting, on Windows, Linux and macOS alike. Killing or
+trusting on a bare pid means killing or trusting a stranger.
 
 **Absence is not evidence.** The registry cannot see every consumer — a process
 on older code never registers, one whose announcement failed is absent, one

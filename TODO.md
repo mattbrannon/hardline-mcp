@@ -21,13 +21,11 @@ ownership. That closes this side only: an older process will not read the new
 table whatever we write. It resolves itself as old processes exit, and the
 orphan `sessions` table can be dropped once none remain.
 
-**macOS has no creation tokens.** `procid.process_key` returns `None` there
-(`proc_pidinfo` is not wired up). A record without a token is honoured on pid
-liveness alone, so a reused pid passes for its process: it can keep a lane held
-or a job looking owned, which refuses rather than steals. A bound launching
-host without a token is `unknown`, never verified alive, so it blocks a
-takeover. Instance-bound watchers cannot be armed. Windows and Linux are
-covered.
+**A record without a creation token is honoured on pid liveness alone.** Every
+platform reads one now (macOS since #69), but rows written before that, or
+whose token would not read, let a reused pid pass for its process: they can
+keep a lane held or a job looking owned, which refuses rather than steals. They
+age out with the processes that wrote them.
 
 **`claim` probes the OS inside `BEGIN IMMEDIATE`.** It holds the single writer
 while checking holders and job owners. The row count is normally zero or one,
