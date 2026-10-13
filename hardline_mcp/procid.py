@@ -18,9 +18,13 @@ creation-time token beside it and compare before acting.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
+import sys
 from typing import NamedTuple, Optional
+
+_MACOS = sys.platform == "darwin"  # module-level, so tests need not patch sys
 
 _SYNCHRONIZE = 0x00100000
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
@@ -143,8 +147,79 @@ def pid_alive(pid: Optional[int]) -> bool:
         return False
     # kill(pid, 0) succeeds for a ZOMBIE, which is dead but unreaped. Treating
     # one as alive would keep everything it owns pinned as active indefinitely.
+    if _MACOS:
+        try:
+            _darwin_info(pid)
+        except ProcessLookupError:
+            return False  # signalable, yet no process left to describe: a zombie
+        return True
     state = _proc_state_linux(pid)
     return state != "Z"
+
+
+class _DarwinInfo(NamedTuple):
+    ppid: int
+    name: str
+    start: str  # "seconds:microseconds", ordered like Windows' high:low words
+
+
+_PROC_PIDTBSDINFO = 3  # <sys/proc_info.h>
+_libproc_cache: list = []
+
+
+def _darwin_info(pid: int) -> Optional[_DarwinInfo]:
+    """What Linux reads from ``/proc/<pid>/stat``, from ``proc_pidinfo``.
+
+    One ``proc_bsdinfo`` carries the start time (the creation token), the
+    parent and the name, so every macOS probe here asks once. None where the
+    call is refused (another user's process); callers treat that exactly as
+    an unreadable ``/proc``. Raises ProcessLookupError (ESRCH) for a process
+    with nothing left to describe - gone, or a zombie, which macOS refuses
+    rather than reporting its state - so a zombie still answers ``kill(0)``.
+    """
+    import ctypes
+
+    u32 = ctypes.c_uint32
+
+    class _BSDInfo(ctypes.Structure):
+        _fields_ = [
+            *((f, u32) for f in ("flags", "status", "xstatus", "pid", "ppid")),
+            *((f, u32) for f in ("uid", "gid", "ruid", "rgid", "svuid", "svgid", "rfu_1")),
+            ("comm", ctypes.c_char * 16),  # MAXCOMLEN
+            ("name", ctypes.c_char * 32),
+            *((f, u32) for f in ("nfiles", "pgid", "pjobc", "e_tdev", "e_tpgid")),
+            ("nice", ctypes.c_int32),
+            ("start_tvsec", ctypes.c_uint64),
+            ("start_tvusec", ctypes.c_uint64),
+        ]
+
+    if not _libproc_cache:
+        try:
+            libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        except OSError:
+            return None
+        libproc.proc_pidinfo.argtypes = (
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        )
+        libproc.proc_pidinfo.restype = ctypes.c_int
+        _libproc_cache.append(libproc)
+    info = _BSDInfo()
+    size = ctypes.sizeof(info)
+    # A short answer is a refusal, not a struct to read fields from.
+    if _libproc_cache[0].proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, ctypes.byref(info), size) != size:
+        if ctypes.get_errno() == errno.ESRCH:
+            raise ProcessLookupError(pid)
+        return None
+    return _DarwinInfo(
+        ppid=info.ppid,
+        # `name` is empty unless the process set one; `comm` is the executable.
+        name=(info.name or info.comm).decode("utf-8", "replace"),
+        start=f"{info.start_tvsec}:{info.start_tvusec}",
+    )
 
 
 def _proc_state_linux(pid: int) -> Optional[str]:
@@ -172,18 +247,15 @@ def process_key(pid: int) -> Optional[str]:
     ``None`` where the platform will not say; callers must decide what to do
     with an unverifiable identity rather than assume it matches.
 
-    Windows and Linux are covered. **macOS is not**: there is no ``/proc``, so
-    every key is None there and identity degrades to the pid alone - a reused
-    pid is undetectable, and a durable record can be honoured for the wrong
-    process. The package does not otherwise restrict its platform, so this is a
-    real gap rather than an impossible case; it needs ``proc_pidinfo`` via
-    ctypes to close. Recorded here rather than silently degraded because the
-    None branch in ``instance_alive`` looks deliberate at the call site and
-    gives no hint that a whole platform takes it always.
+    Windows reads ``GetProcessTimes``, Linux ``/proc``, macOS
+    ``proc_pidinfo``: none of them spawns anything.
     """
     if not pid or pid <= 0:
         return None
     try:
+        if _MACOS:
+            info = _darwin_info(pid)
+            return info.start if info else None
         if os.name == "nt":
             import ctypes
             from ctypes import wintypes
@@ -322,6 +394,9 @@ def image_name(pid: int) -> Optional[str]:
     if not pid or pid <= 0:
         return None
     try:
+        if _MACOS:
+            info = _darwin_info(pid)
+            return info.name if info else None
         if os.name == "nt":
             import ctypes
             from ctypes import wintypes
@@ -355,6 +430,9 @@ def parent_pid_of(pid: int) -> Optional[int]:
     if not pid or pid <= 0:
         return None
     try:
+        if _MACOS:
+            info = _darwin_info(pid)
+            return info.ppid if info else None
         if os.name == "nt":
             return _windows_parent(pid)
         with open(f"/proc/{pid}/stat", "r", encoding="utf-8", errors="replace") as fh:
@@ -412,7 +490,8 @@ class Ancestor(NamedTuple):
 def _created_after(parent_key: Optional[str], child_key: Optional[str]) -> bool:
     """A reused parent PID cannot have been created after its living child.
 
-    Linux tokens are start ticks; Windows tokens are FILETIME high:low words.
+    Linux tokens are start ticks; Windows tokens are FILETIME high:low words;
+    macOS tokens are seconds:microseconds, which order the same way.
     Unknown tokens cannot establish creation order.
     """
 

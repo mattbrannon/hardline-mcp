@@ -236,8 +236,8 @@ elsewhere. Whether that was a relaunch of the same Claude conversation takes
 interpretation: the job stores no conversation, only its requester lane, which
 for a lane derived from a conversation carries the id's first eight
 characters; the recorded conversation is the acker's, the one its server was
-started under, and two windows can share it. A missing creation token (macOS)
-proves nothing about two equal pids. Ordinary mail has no recorded intent, so
+started under, and two windows can share it. A missing creation token proves
+nothing about two equal pids. Ordinary mail has no recorded intent, so
 a different acker there is a difference to interpret, not a verdict.
 
 This records consumption, not readership. A consuming read commits before its
@@ -318,6 +318,8 @@ one-shot CLI. See [inbox setup](inbox-signals.md) and
 user on one machine, so there is nothing to defend against that an attacker
 could not do directly. The guards here prevent *confusion*, not intrusion.
 
-**Creation tokens are unavailable on macOS.** The current probe does not use
-`proc_pidinfo`. Legacy PID-only records cannot detect PID reuse; new bound hosts
-remain unknown without a token, and instance-bound watchers cannot be armed.
+**A record without a creation token cannot detect PID reuse.** Every platform
+reads one now (`GetProcessTimes`, `/proc`, `proc_pidinfo` on macOS, which read
+none before #69), but records written without one, and processes whose token
+will not read, keep PID-only behavior; a bound host without a token stays
+unknown.

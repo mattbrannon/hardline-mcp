@@ -17,7 +17,7 @@ real loopback WebSockets, and headless MCP subprocesses. It does not require
 agent accounts or start model turns. Never point manual tests at the operator's
 mailbox; use a separate `HARDLINE_DB`.
 
-CI runs three jobs side by side: the suite on Ubuntu and Windows with Python
+CI runs three jobs side by side: the suite on Ubuntu, Windows and macOS with Python
 3.10 and 3.14, in parallel workers (`-n auto`, from `pytest-xdist` in the `dev`
 extra); the mutation catalog once; and the live sandbox tests on Linux and
 macOS. The `codex-watch` extra enables adapter tests that otherwise skip. Keep

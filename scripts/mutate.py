@@ -84,7 +84,10 @@ def _selects(selector: str, key: tuple[str, str]) -> bool:
 def _tree(source: Path):
     """A disposable copy of the source tree."""
     with tempfile.TemporaryDirectory(prefix="hardline-mutation-") as directory:
-        root = Path(directory)
+        # Resolved: on macOS the temp dir is /var/..., a symlink to
+        # /private/var/..., and pytest names tests from the resolved path, so
+        # an unresolved --rootdir made every junit name miss its selector.
+        root = Path(directory).resolve()
         for name in ("hardline_mcp", "tests", "scripts"):
             if (source / name).exists():
                 shutil.copytree(
