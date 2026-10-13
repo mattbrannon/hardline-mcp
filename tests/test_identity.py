@@ -115,7 +115,7 @@ def test_prune_preserves_replaced_host_identity(tmp_path, monkeypatch):
     db = tmp_path / "mb.db"
     sessions.register(agent="codex", lane="codex:role", db_path=db)
 
-    def probe_and_replace(row):
+    def probe_and_replace(row, probe=None):
         with mailbox._connect(db) as conn:
             conn.execute("UPDATE agent_sessions SET host_pid = 456, host_key = 'new'")
             conn.commit()

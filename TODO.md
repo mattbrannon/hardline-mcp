@@ -37,10 +37,6 @@ whose token would not read, let a reused pid pass for its process: they can
 keep a lane held or a job looking owned, which refuses rather than steals. They
 age out with the processes that wrote them.
 
-**`claim` probes the OS inside `BEGIN IMMEDIATE`.** It holds the single writer
-while checking holders and job owners. The row count is normally zero or one,
-so it is microseconds, but it is the writer lock.
-
 ## Shipped since this list was written
 
 - Session-to-session mail watched working on the real store, Claude to Codex
@@ -55,3 +51,5 @@ so it is microseconds, but it is the writer lock.
 - Ownership no longer reads the pre-`agent_sessions` registry: no process can
   still write it (see "Retiring the legacy registry" in
   `docs/architecture.md`).
+- `claim` probes holders and job owners before it reserves the single writer,
+  reusing inside only answers that refuse.

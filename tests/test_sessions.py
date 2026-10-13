@@ -70,7 +70,7 @@ def test_prune_only_deletes_the_instance_it_probed(tmp_path, monkeypatch):
     db = tmp_path / "mb.db"
     sessions.register(agent="codex", lane="codex:a", pid=_DEAD_PID, db_path=db)
 
-    def probe_then_race(row):
+    def probe_then_race(row, probe=None):
         # The pid is reused and re-registered while the pruner holds its
         # (now stale) view of the row.
         with mailbox._connect(db) as conn:
@@ -151,7 +151,7 @@ def test_a_probe_that_cannot_answer_is_not_a_death(tmp_path, monkeypatch):
     db = tmp_path / "mb.db"
     sessions.register(agent="codex", lane="codex:a", db_path=db)
 
-    monkeypatch.setattr(sessions, "_state", lambda row: procid.UNKNOWN)
+    monkeypatch.setattr(sessions, "_state", lambda row, probe=None: procid.UNKNOWN)
 
     assert [s["lane"] for s in sessions.live(db_path=db)] == ["codex:a"], (
         "an unanswerable probe must not hide a session"
@@ -304,6 +304,54 @@ def test_registration_will_not_co_register_a_lane_someone_live_holds(tmp_path):
     assert [h["pid"] for h in sessions.holders("codex:shared", db_path=db)] == [other]
 
 
+@pytest.fixture
+def holder(tmp_path):
+    """Another live process, registered as the holder of ``codex:taken``."""
+    import subprocess
+    import sys
+
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import sys; sys.stdin.read()"], stdin=subprocess.PIPE
+    )
+    db = tmp_path / "mb.db"
+    sessions.register(agent="codex", lane="codex:taken", pid=proc.pid, db_path=db)
+    yield db
+    proc.kill()
+    proc.wait()
+
+
+def test_a_claim_probes_before_it_reserves_the_writer(holder, monkeypatch):
+    """Probing every holder while holding the store's one writer serialized
+    every other writer behind process probes; none may run under it."""
+    real, under_writer = sessions.instance_state, []
+
+    def probe(pid, key):
+        other = sqlite3.connect(holder, timeout=0)
+        try:
+            other.execute("BEGIN IMMEDIATE")
+            other.rollback()
+            under_writer.append(False)
+        except sqlite3.OperationalError:  # locked: the claim holds the writer
+            under_writer.append(True)
+        finally:
+            other.close()
+        return real(pid, key)
+
+    monkeypatch.setattr(sessions, "instance_state", probe)
+    assert sessions.claim(agent="codex", label="taken", db_path=holder)["ok"] is False
+    assert under_writer and not any(under_writer)
+
+
+def test_an_answer_that_would_grant_is_asked_again_inside_the_writer(holder, monkeypatch):
+    """Reusing an earlier answer is safe only when it refuses: a holder read
+    dead outside the writer is asked again where the grant is decided."""
+    real, first = sessions.instance_state, [procid.DEAD]
+    monkeypatch.setattr(
+        sessions, "instance_state", lambda pid, key: first.pop() if first else real(pid, key)
+    )
+    assert sessions.claim(agent="codex", label="taken", db_path=holder)["ok"] is False
+
+
 def test_registration_still_refreshes_a_lane_this_process_already_holds(tmp_path):
     """Its own row is not a conflict, or every heartbeat would refuse itself."""
     db = tmp_path / "mb.db"
@@ -324,7 +372,7 @@ def test_a_holder_reports_which_kind_of_live_it_is(tmp_path, monkeypatch):
     sessions.register(agent="codex", lane="codex:a", db_path=db)
     assert sessions.live(db_path=db)[0]["liveness"] == procid.ALIVE
 
-    monkeypatch.setattr(sessions, "_state", lambda row: procid.UNKNOWN)
+    monkeypatch.setattr(sessions, "_state", lambda row, probe=None: procid.UNKNOWN)
     assert sessions.live(db_path=db)[0]["liveness"] == procid.UNKNOWN
     assert sessions.holders("codex:a", db_path=db)[0]["liveness"] == procid.UNKNOWN
 
