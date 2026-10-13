@@ -106,6 +106,19 @@ notice or a notice without its result. Only the owning process instance may
 finish the job, and a conditional transition prevents duplicate notices.
 Cancellation keeps its terminal state even if a worker later returns a result.
 
+A terminal write the store refuses is kept, not printed and dropped: the
+worker's result exists only in its process until it lands, so that process
+retries it on its own polls, job lookups and wake cycles (`server._settle_debts`,
+every `channel.FULFIL_S` while a wake loop runs), one pass at a time. A refusal
+ends the pass, sends that debt to the back of the line and rests before the
+next, so a store still down costs one wait per rest and one failing debt
+cannot hold up the rest. Repeats are safe because `finish` matches only a row
+still owed a result. A job whose claim (`mark_running`) the store refuses
+never runs its agent, since a cancel may have landed; it fails with the reason.
+An unpaid result keeps its admission slot, so admission bounds debts too. The
+result is lost only if its process exits first (the job then reads `lost`) or
+the store loses the job.
+
 Admission bounds running plus queued work per server. Validation happens before
 capacity is reserved; a full pool creates no job. A cancellable queue removes
 cancelled callables and releases slots, so admission tracks work that can still

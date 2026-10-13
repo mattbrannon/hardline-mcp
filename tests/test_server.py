@@ -1624,6 +1624,189 @@ async def test_dispatch_returns_a_durable_handle_and_records_the_job(
     assert "prompt" not in status["job"]["request"]
 
 
+@pytest.fixture
+def owed(monkeypatch, tmp_path):
+    """A store a job's terminal writes can be refused by, with no debts left
+    over from another test."""
+    import sqlite3
+
+    monkeypatch.setenv("HARDLINE_DB", str(tmp_path / "mb.db"))
+    monkeypatch.setattr(server, "_debts", {})
+    monkeypatch.setattr(server, "_debt_slots", {})
+    monkeypatch.setattr(server, "_debt_rest_until", [0.0])
+    monkeypatch.setattr(server._async_executor, "submit", _immediate_submit)
+    calls = {"agent": 0}
+
+    def agent(prompt, **kwargs):
+        calls["agent"] += 1
+        return {"ok": True, "reply": "done"}
+
+    monkeypatch.setattr(server.adapters, "ask_codex", agent)
+
+    def refuse(real, times, after_commit=False):
+        left = [times]
+
+        def write(*args, **kwargs):
+            if after_commit:
+                real(*args, **kwargs)
+            if left[0]:
+                left[0] -= 1
+                raise sqlite3.OperationalError("database is locked")
+            return real(*args, **kwargs)
+
+        return write
+
+    calls["refuse"] = refuse
+    return calls
+
+
+def _notices(job_id):
+    return [m for m in server.mailbox.history(agent="claude") if job_id in m["body"]]
+
+
+@pytest.mark.anyio
+async def test_a_refused_finish_is_paid_on_the_next_look_at_the_job(owed, monkeypatch):
+    monkeypatch.setattr(server.jobs, "finish", owed["refuse"](server.jobs.finish, 1))
+    got = await server.ask_codex_async(prompt="review", from_agent="claude")
+    assert server._debts, "the result must be kept, not printed and dropped"
+
+    result = await server.job_result(job_id=got["job_id"])
+    assert result["state"] == server.jobs.COMPLETED and result["result"]["reply"] == "done"
+    assert len(_notices(got["job_id"])) == 1 and not server._debts
+
+
+@pytest.mark.anyio
+async def test_a_finish_that_committed_and_then_raised_notifies_once(owed, monkeypatch):
+    monkeypatch.setattr(
+        server.jobs, "finish", owed["refuse"](server.jobs.finish, 1, after_commit=True)
+    )
+    got = await server.ask_codex_async(prompt="review", from_agent="claude")
+    await server.job_status(job_id=got["job_id"])
+    assert len(_notices(got["job_id"])) == 1 and not server._debts
+
+
+@pytest.mark.anyio
+async def test_a_job_that_cannot_be_claimed_fails_without_running(owed, monkeypatch):
+    """Whether a cancel landed is unknowable, so the agent never runs on a guess.
+    Refused twice: the claim, then the deferred failure's own claim."""
+    monkeypatch.setattr(server.jobs, "mark_running", owed["refuse"](server.jobs.mark_running, 2))
+    got = await server.ask_codex_async(prompt="review", from_agent="claude")
+    assert server._debts
+
+    status = (await server.job_status(job_id=got["job_id"]))["job"]
+    assert owed["agent"] == 0
+    assert status["state"] == server.jobs.FAILED and "could not start" in status["error"]
+    assert len(_notices(got["job_id"])) == 1
+
+
+@pytest.mark.anyio
+async def test_a_claim_that_committed_and_then_raised_still_ends(owed, monkeypatch):
+    """The retried claim then answers False, and the failure is recorded anyway."""
+    monkeypatch.setattr(
+        server.jobs, "mark_running", owed["refuse"](server.jobs.mark_running, 1, after_commit=True)
+    )
+    got = await server.ask_codex_async(prompt="review", from_agent="claude")
+    status = (await server.job_status(job_id=got["job_id"]))["job"]
+    assert owed["agent"] == 0 and status["state"] == server.jobs.FAILED
+
+
+@pytest.mark.anyio
+async def test_the_next_poll_pays_a_debt_before_reading(owed, monkeypatch):
+    monkeypatch.setattr(server.jobs, "finish", owed["refuse"](server.jobs.finish, 1))
+    got = await server.ask_codex_async(prompt="review", from_agent="claude")
+    read = await server.inbox(agent="claude")
+    assert [m for m in read["messages"] if got["job_id"] in m["body"]]
+
+
+@pytest.mark.anyio
+async def test_an_idle_session_pays_its_debts_on_its_wake_cycle(owed, monkeypatch):
+    monkeypatch.setattr(server.jobs, "finish", owed["refuse"](server.jobs.finish, 1))
+    got = await server.ask_codex_async(prompt="review", from_agent="claude")
+    server._regain_lanes()  # what the wake loops run every channel.FULFIL_S
+    assert len(_notices(got["job_id"])) == 1
+
+
+@pytest.mark.anyio
+async def test_a_store_still_down_costs_one_refusal_per_rest(owed, monkeypatch):
+    attempts = []
+
+    def down(*args, **kwargs):
+        attempts.append(args)
+        raise RuntimeError("store unavailable")
+
+    monkeypatch.setattr(server.jobs, "finish", down)
+    for _ in range(2):
+        await server.ask_codex_async(prompt="review", from_agent="claude")
+    assert len(attempts) == 2 and len(server._debts) == 2
+
+    server._settle_debts()
+    server._settle_debts()  # inside the rest
+    assert len(attempts) == 3, "one refusal stops the pass, and the rest holds"
+
+
+@pytest.mark.anyio
+async def test_an_unpaid_result_keeps_its_admission_slot(owed, monkeypatch):
+    """Debts are bounded by admission: a result the store has not taken is
+    still work in flight."""
+    monkeypatch.setattr(server, "_async_slots", threading.BoundedSemaphore(1))
+    monkeypatch.setattr(server.jobs, "finish", owed["refuse"](server.jobs.finish, 1))
+    await server.ask_codex_async(prompt="first", from_agent="claude")
+    full = await server.ask_codex_async(prompt="second", from_agent="claude")
+    assert full.get("accepted") is not True, "admitted past an unpaid result"
+
+    server._settle_debts()
+    assert (await server.ask_codex_async(prompt="third", from_agent="claude"))["accepted"]
+
+
+def test_one_settling_pass_at_a_time(owed, monkeypatch):
+    """A second caller returns at once: two passes would both wait on the store."""
+    inside, release, attempts = threading.Event(), threading.Event(), []
+
+    def slow():
+        attempts.append(1)
+        inside.set()
+        release.wait(10)
+        raise RuntimeError("store unavailable")
+
+    server._debts[("db", "job")] = slow
+    worker = threading.Thread(target=server._settle_debts)
+    worker.start()
+    assert inside.wait(10)
+    server._settle_debts()
+    release.set()
+    worker.join(10)
+    assert attempts == [1]
+
+
+def test_a_refused_debt_goes_to_the_back_of_the_line(owed, monkeypatch):
+    monkeypatch.setattr(server, "_DEBT_REST_S", 0.0)
+    paid = []
+
+    def stuck():
+        raise RuntimeError("this one keeps failing")
+
+    server._debts[("db", "stuck")] = stuck
+    server._debts[("db", "fine")] = lambda: paid.append("fine")
+    server._settle_debts()
+    server._settle_debts()
+    assert paid == ["fine"] and list(server._debts) == [("db", "stuck")]
+
+
+def test_a_debt_replaced_while_it_was_retried_is_kept(monkeypatch, tmp_path):
+    monkeypatch.setattr(server, "_debts", {})
+    monkeypatch.setattr(server, "_debt_slots", {})
+    monkeypatch.setattr(server, "_debt_rest_until", [0.0])
+    key = (tmp_path, "job_1")
+    newer = lambda: None  # noqa: E731
+
+    def older():
+        server._debts[key] = newer  # a fresh debt for the same job lands meanwhile
+
+    server._debts[key] = older
+    server._settle_debts()
+    assert server._debts == {key: newer}
+
+
 @pytest.mark.anyio
 async def test_job_result_survives_the_mailbox_being_consumed(monkeypatch, tmp_path):
     """The durability claim: a result recorded against the job is retrievable
