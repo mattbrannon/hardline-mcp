@@ -9,6 +9,7 @@ passed the whole suite while identity there degraded to bare pids.
 import os
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -47,6 +48,9 @@ def test_an_exited_child_is_a_different_instance_than_its_record(child):
 @pytest.mark.skipif(os.name == "nt", reason="Windows has no zombies to tell apart")
 def test_an_unreaped_child_is_not_alive(child):
     """kill(pid, 0) succeeds for a zombie: only the process state says it is dead."""
-    child.stdin.close()
-    os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOWAIT)  # exited, not reaped
+    child.stdin.close()  # it exits; nothing here reaps it until the fixture does
+    deadline = time.monotonic() + 10
+    while procid.pid_alive(child.pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert child.returncode is None, "reaped: no zombie was tested"
     assert procid.pid_alive(child.pid) is False
