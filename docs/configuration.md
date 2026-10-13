@@ -6,7 +6,8 @@ Set environment variables on the **MCP server registration**. Reconnect after
 changing its environment or updating the editable source; an already-running
 server retains its loaded code. `server_info()` reports the code revision,
 package version, module path, database path, limits, write gate, job counts,
-and watcher command. Check `code_revision` when confirming an update is loaded.
+watcher command, and the agent executables a spawn would run. Check
+`code_revision` when confirming an update is loaded.
 
 ## Mailbox and CLI paths
 
@@ -208,10 +209,31 @@ listed path as a directory, so it can only hold directories.
 
 ### Codex compatibility errors
 
-If Codex says a model needs a newer client, check the executable selected by
-`HARDLINE_CODEX_CMD` or the MCP server's `PATH` with `--version`. Updating a
-different Codex installation will not change that selection. Reconnect the MCP
-server after a Hardline update; restart its host if it inherited an old `PATH`.
+If Codex says a model needs a newer client, ask the serving process which
+executable it runs. `server_info().agent_commands` reports, per agent, the
+program name dispatch would hand the OS next and the rule that chose it,
+resolved fresh from that process's environment by dispatch's own resolver:
+
+```json
+"agent_commands": {
+  "codex": {"executable": "C:/.../Codex/bin/3f9a.../codex.exe", "source": "legacy_discovery"}
+}
+```
+
+`source` is `override` (`HARDLINE_CODEX_CMD`), `path` (found on the server's
+`PATH`), `legacy_discovery` (the most recently modified binary under Codex's
+hash-named Windows install directories), or `bare` (neither found one; the
+name alone). A bare or relative name is resolved by the OS at spawn time, and
+Windows searches the application, current and system directories before
+`PATH`. A resolution that fails reads `{"error": ...}` for that agent alone.
+A job resolves when it starts, and quota routing can send an `ask_claude` call
+to Codex.
+
+`legacy_discovery`, as above, means no `codex` on the server's `PATH`, so a
+desktop bundle runs, and it may be an old one. Run the reported executable
+with `--version`; updating a different Codex installation will not change the
+selection. Reconnect the MCP server after a Hardline update; restart its host
+if it inherited an old `PATH`.
 
 Use `codex debug models` on the selected current CLI to inspect its model catalog
 without starting a task. Pass an exact supported identifier, such as

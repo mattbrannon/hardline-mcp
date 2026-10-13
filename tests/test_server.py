@@ -1,6 +1,8 @@
 """Server wiring smoke tests — import, tool registration, send/deliver glue."""
 
+import collections
 from concurrent.futures import Future
+import itertools
 
 import json
 import os
@@ -1515,6 +1517,51 @@ async def test_server_info_reports_version_limits_and_timeouts(monkeypatch, tmp_
     assert "argv" in got["watch"]
     assert got["quota_routing"]["configured"] is True
     assert got["quota_routing"]["claude_weekly_reserve_percent"] == 7
+
+
+@pytest.mark.anyio
+async def test_server_info_reports_what_dispatch_would_run(monkeypatch, tmp_path):
+    """Dispatch's own resolver, asked afresh on every call, spawning nothing.
+
+    Not a parallel guess: which Codex ran has cost an investigation outside
+    the session that hit it (#31). A resolver answering differently each time
+    tells delegation from a copy of the same rules, and a cache from neither."""
+    monkeypatch.setenv("HARDLINE_DB", str(tmp_path / "mb.db"))
+
+    def spawned(*args, **kwargs):
+        raise AssertionError("a diagnostic started a process")
+
+    monkeypatch.setattr(server.adapters.subprocess, "Popen", spawned)
+    monkeypatch.setattr(server.adapters.subprocess, "run", spawned)
+    asked = collections.defaultdict(itertools.count)
+    monkeypatch.setattr(
+        server.adapters,
+        "agent_command",
+        lambda agent: server.adapters.AgentCommand(f"{agent}-{next(asked[agent])}", "override"),
+    )
+    first = (await server.server_info())["agent_commands"]
+    assert first == {
+        agent: {"executable": f"{agent}-0", "source": "override"}
+        for agent in server.adapters.known_agents()
+    }
+    assert (await server.server_info())["agent_commands"]["codex"]["executable"] == "codex-1"
+    assert server.adapters._prefix_for("codex")[0] == "codex-2"
+
+
+@pytest.mark.anyio
+async def test_a_failed_resolution_is_that_agents_error_alone(monkeypatch, tmp_path):
+    monkeypatch.setenv("HARDLINE_DB", str(tmp_path / "mb.db"))
+    monkeypatch.delenv("HARDLINE_CODEX_CMD", raising=False)
+    monkeypatch.setattr(server.adapters.shutil, "which", lambda _: None)
+
+    def unreadable():
+        raise PermissionError("bin root denied")
+
+    monkeypatch.setattr(server.adapters, "_discover_codex", unreadable)
+    got = await server.server_info()
+    assert got["agent_commands"]["codex"] == {"error": "PermissionError: bin root denied"}
+    assert "source" in got["agent_commands"]["claude"]
+    assert got["limits"]["inbox_default"] == server.mailbox.DEFAULT_INBOX_LIMIT
 
 
 @pytest.mark.anyio

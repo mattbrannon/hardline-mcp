@@ -1202,6 +1202,20 @@ def _code_revision() -> str | None:
     return revision or None
 
 
+def _agent_commands() -> dict[str, dict[str, str]]:
+    """What each agent's next spawn would run, from dispatch's own resolver.
+
+    A resolution that fails is reported as that agent's error, not a guess,
+    and does not take the rest of ``server_info`` down with it."""
+    commands = {}
+    for agent in adapters.known_agents():
+        try:
+            commands[agent] = adapters.agent_command(agent)._asdict()
+        except Exception as exc:  # noqa: BLE001 - a diagnostic must never be the failure
+            commands[agent] = {"error": f"{type(exc).__name__}: {exc}"}
+    return commands
+
+
 @mcp.tool()
 async def server_info() -> dict:
     """Version, limits, and timeout budgets of THIS running hardline-mcp.
@@ -1242,6 +1256,9 @@ async def server_info() -> dict:
         "db_path": str(mailbox._resolve_db(None)),
         "pid": os.getpid(),
         "watch": watch.launch_info(adapters.self_agent()),
+        # Which binary was picked has cost a whole investigation before: an
+        # old Codex bundle once ran ahead of the maintained one on PATH (#31).
+        "agent_commands": await _in_thread(_agent_commands),
         "jobs": await _in_thread(jobs.counts),
         "limits": {
             "inbox_default": mailbox.DEFAULT_INBOX_LIMIT,

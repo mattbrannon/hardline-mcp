@@ -87,7 +87,7 @@ def _discover_codex() -> Optional[str]:
 #           (Without -Q the reply is ~940 chars of ANSI box art per call.)
 #   codex:  exec writes only the final answer to stdout (its session log/
 #           token-count go to stderr, which we don't return), so the reply is
-#           already clean. Resolved via discovery (see _prefix_for) because
+#           already clean. Resolved via discovery (see agent_command) because
 #           its install dir is hash-named.
 #   claude: -p headless print mode is already clean; normally on PATH.
 _DISPATCH = {
@@ -533,15 +533,33 @@ _CLAUDE_ADVISORY_SYSTEM_PROMPT = (
 )
 
 
+class AgentCommand(NamedTuple):
+    executable: str
+    source: str  # override | path | legacy_discovery | bare
+
+
+def agent_command(agent: str) -> AgentCommand:
+    """The program a spawn of ``agent`` is handed, and the rule that chose it.
+
+    Dispatch and ``server_info`` both ask this, afresh on every call, so the
+    diagnostic is what the next spawn runs, not a guess beside it. Precedence:
+    explicit env override > resolved PATH > legacy discovery > bare name. PATH
+    is the current Codex install channel; discovery retains compatibility with
+    its older hash-named Windows install directories. A bare or relative name
+    is left to the OS to find at spawn time."""
+    default_exe, _, env_var = _DISPATCH[agent]
+    if exe := os.environ.get(env_var):
+        return AgentCommand(exe, "override")
+    if agent == "codex":
+        if exe := shutil.which(default_exe):
+            return AgentCommand(exe, "path")
+        if exe := _discover_codex():
+            return AgentCommand(exe, "legacy_discovery")
+    return AgentCommand(default_exe, "bare")
+
+
 def _prefix_for(agent: str) -> list[str]:
-    default_exe, subcmd, env_var = _DISPATCH[agent]
-    # Precedence: explicit env override > resolved PATH > legacy discovery >
-    # bare name. PATH is the current Codex install channel; discovery retains
-    # compatibility with its older hash-named Windows install directories.
-    exe = os.environ.get(env_var)
-    if not exe and agent == "codex":
-        exe = shutil.which(default_exe) or _discover_codex()
-    return [exe or default_exe, *subcmd]
+    return [agent_command(agent).executable, *_DISPATCH[agent][1]]
 
 
 def known_agents() -> tuple[str, ...]:
