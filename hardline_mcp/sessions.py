@@ -110,11 +110,12 @@ def _state(row: sqlite3.Row) -> str:
     return UNKNOWN if UNKNOWN in (state, host) else state
 
 
-def host_state(row: sqlite3.Row) -> str:
-    """Legacy rows are unbound; a bound host needs a token to be verified alive."""
+def host_state(row: sqlite3.Row, probe: Callable[..., str] = None) -> str:
+    """Legacy rows are unbound; a bound host needs a token to be verified alive.
+    ``probe`` stands in for ``instance_state``, so a caller can share probes."""
     if "host_pid" not in row.keys() or row["host_pid"] is None:
         return ALIVE
-    state = instance_state(row["host_pid"], row["host_key"])
+    state = (probe or instance_state)(row["host_pid"], row["host_key"])
     return UNKNOWN if row["host_key"] is None and state == ALIVE else state
 
 
@@ -152,20 +153,25 @@ def _prune_dead(conn: sqlite3.Connection) -> None:
         for r in rows
         if _state(r) == DEAD
     ]
-    if not dead:
-        return
-    with conn:
-        conn.executemany(
-            "DELETE FROM agent_sessions WHERE pid = ? AND lane = ?"
-            " AND process_key IS ? AND host_pid IS ? AND host_key IS ?",
-            dead,
-        )
-        # A revision lives as long as its process's registry rows.
-        conn.execute(PROCESS_REVISIONS_TABLE)
-        conn.execute(
-            "DELETE FROM process_revisions WHERE NOT EXISTS (SELECT 1 FROM agent_sessions s"
-            " WHERE s.pid = process_revisions.pid AND s.process_key = process_revisions.process_key)"
-        )
+    if dead:
+        with conn:
+            conn.executemany(
+                "DELETE FROM agent_sessions WHERE pid = ? AND lane = ?"
+                " AND process_key IS ? AND host_pid IS ? AND host_key IS ?",
+                dead,
+            )
+    # A revision lives as long as its process's registry rows, however they
+    # went (a death above, an unregister, a takeover). Look before writing.
+    conn.execute(PROCESS_REVISIONS_TABLE)
+    if conn.execute(f"SELECT 1 {_ORPHAN_REVISIONS} LIMIT 1").fetchone():
+        with conn:
+            conn.execute(f"DELETE {_ORPHAN_REVISIONS}")
+
+
+_ORPHAN_REVISIONS = (
+    "FROM process_revisions WHERE NOT EXISTS (SELECT 1 FROM agent_sessions s"
+    " WHERE s.pid = process_revisions.pid AND s.process_key = process_revisions.process_key)"
+)
 
 
 def record_revision(revision: Optional[str], *, db_path: Optional[Path] = None) -> None:

@@ -154,7 +154,7 @@
   },
   "host-lifetime": {
     "file": "hardline_mcp/sessions.py",
-    "before": "state = instance_state(row[\"host_pid\"], row[\"host_key\"])",
+    "before": "state = (probe or instance_state)(row[\"host_pid\"], row[\"host_key\"])",
     "after": "state = ALIVE",
     "tests": [
       "tests/test_identity.py::test_orphan_server_lifetime_follows_host"
@@ -2668,8 +2668,8 @@
   },
   "report-binds-a-revision-to-its-process-identity": {
     "file": "hardline_mcp/report.py",
-    "before": "                \"revision\": revisions.get((pid, key)),\n",
-    "after": "                \"revision\": next((r for (p, _), r in revisions.items() if p == pid), None),\n",
+    "before": "            \"revision\": recorded.get((pid, key)),\n",
+    "after": "            \"revision\": next((r for (p, _), r in recorded.items() if p == pid), None),\n",
     "tests": [
       "tests/test_report.py::test_revisions_are_counted_per_running_process"
     ]
@@ -2692,8 +2692,8 @@
   },
   "a-revision-lives-as-long-as-its-registry-rows": {
     "file": "hardline_mcp/sessions.py",
-    "before": "            \"DELETE FROM process_revisions WHERE NOT EXISTS (SELECT 1 FROM agent_sessions s\"\n",
-    "after": "            \"DELETE FROM process_revisions WHERE 0 AND NOT EXISTS (SELECT 1 FROM agent_sessions s\"\n",
+    "before": "    \"FROM process_revisions WHERE NOT EXISTS (SELECT 1 FROM agent_sessions s\"\n",
+    "after": "    \"FROM process_revisions WHERE 0 AND NOT EXISTS (SELECT 1 FROM agent_sessions s\"\n",
     "tests": [
       "tests/test_sessions.py::test_a_live_session_names_its_recorded_revision_until_it_dies"
     ]
@@ -2704,6 +2704,54 @@
     "after": "        pass\n",
     "tests": [
       "tests/test_sessions.py::test_list_agents_names_the_revision_each_server_runs"
+    ]
+  },
+  "a-revision-goes-however-its-rows-go": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "    if conn.execute(f\"SELECT 1 {_ORPHAN_REVISIONS} LIMIT 1\").fetchone():\n",
+    "after": "    if dead and conn.execute(f\"SELECT 1 {_ORPHAN_REVISIONS} LIMIT 1\").fetchone():\n",
+    "tests": [
+      "tests/test_sessions.py::test_a_revision_goes_with_its_registry_rows_however_they_go"
+    ]
+  },
+  "report-releases-its-snapshot-before-probing": {
+    "file": "hardline_mcp/report.py",
+    "before": "    with closing(sqlite3.connect(db.as_uri() + \"?mode=ro\", uri=True, timeout=5)) as conn:\n",
+    "after": "    conn = sqlite3.connect(db.as_uri() + \"?mode=ro\", uri=True, timeout=5)\n    globals().setdefault(\"_held\", []).append(conn)\n    if True:\n",
+    "tests": [
+      "tests/test_report.py::test_probes_run_once_per_identity_after_the_snapshot_closes"
+    ]
+  },
+  "report-probes-each-identity-once": {
+    "file": "hardline_mcp/report.py",
+    "before": "    probe = functools.lru_cache(maxsize=None)(instance_state)  # once per identity\n",
+    "after": "    probe = instance_state\n",
+    "tests": [
+      "tests/test_report.py::test_probes_run_once_per_identity_after_the_snapshot_closes"
+    ]
+  },
+  "report-finds-notices-by-exact-text": {
+    "file": "hardline_mcp/report.py",
+    "before": "    \" WHERE acked_at IS NOT NULL AND instr(body, '\\\"job_finished\\\"') > 0 ORDER BY id DESC\",\n",
+    "after": "    \" WHERE acked_at IS NOT NULL AND body LIKE '{\\\"type\\\": \\\"job_finished\\\"%' ORDER BY id DESC\",\n",
+    "tests": [
+      "tests/test_report.py::test_any_body_is_free_text"
+    ]
+  },
+  "report-checks-a-notice-is-one": {
+    "file": "hardline_mcp/report.py",
+    "before": "    if not isinstance(notice, dict) or notice.get(\"type\") != \"job_finished\":\n",
+    "after": "    if not isinstance(notice, dict):\n",
+    "tests": [
+      "tests/test_report.py::test_any_body_is_free_text"
+    ]
+  },
+  "report-names-the-columns-it-needs": {
+    "file": "hardline_mcp/report.py",
+    "before": "    \"sessions\": \"SELECT pid, process_key, lane, host_pid, host_key FROM agent_sessions ORDER BY pid, seq\",\n",
+    "after": "    \"sessions\": \"SELECT * FROM agent_sessions ORDER BY pid, seq\",\n",
+    "tests": [
+      "tests/test_report.py::test_a_registry_missing_a_column_reads_unavailable_even_when_empty"
     ]
   }
 }

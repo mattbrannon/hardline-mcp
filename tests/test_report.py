@@ -4,6 +4,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from collections import Counter
 
 import pytest
 
@@ -75,6 +76,68 @@ def test_job_notices_are_classified_by_who_acked_them(tmp_path, monkeypatch):
     assert other["dispatched_by"] == {"pid": me[0] + 1, "process_key": "another-instance"}
     assert (other["acked_by"]["pid"], other["acked_by"]["process_key"]) == me
     assert got["acked_messages_without_record"] == 0
+
+
+def test_any_body_is_free_text(tmp_path, monkeypatch):
+    """A body is whatever a sender wrote: odd ones are skipped, never fatal."""
+    db = tmp_path / "mb.db"
+    monkeypatch.setattr(jobs, "current_identity", lambda: (1, "owner"))
+    job = jobs.create(agent="codex", requester="claude:r", label=None, request={}, db_path=db)
+    for body in (
+        '{"type": "job_finished", "job_id": []}',
+        '{"type": "job_finished", "job_id": {"x": 1}}',
+        f'{{"type": "jobXfinished", "job_id": "{job}"}}',
+        '["job_finished"]',
+        "not json, but it says \"job_finished\"",
+        f'{{"type": "note", "about": "job_finished", "job_id": "{job}"}}',
+        f'{{"type":"job_finished","job_id":"{job}"}}',  # compact, and real
+    ):
+        mailbox.send("codex", "claude:r", body, db_path=db)
+    mailbox.inbox("claude:r", owned="claude:r", db_path=db)
+
+    got = report.report(db)["job_notices"]
+    assert (got["same_instance"], got["other_instance"], got["unknown"]) == (0, 1, 0)
+
+
+def test_a_registry_missing_a_column_reads_unavailable_even_when_empty(tmp_path):
+    db = tmp_path / "mb.db"
+    raw = sqlite3.connect(db)
+    with raw:
+        raw.executescript(mailbox._SCHEMA.replace("    process_key TEXT,\n    host_pid", "    host_pid"))
+    raw.close()
+    assert "no such column: process_key" in str(report.report(db)["processes"])
+
+
+def test_probes_run_once_per_identity_after_the_snapshot_closes(tmp_path, monkeypatch):
+    """No reader is held while processes are probed: a checkpoint completes."""
+    db = tmp_path / "mb.db"
+    sessions.register(agent="codex", lane="codex:a", host_pid=7, host_key="h", db_path=db)
+    sessions.register(agent="codex", lane="codex:b", pid=8, host_pid=7, host_key="h", db_path=db)
+    raw = sqlite3.connect(db)
+    with raw:  # the same process in the legacy registry too
+        raw.execute("CREATE TABLE sessions (pid INTEGER, lane TEXT, process_key TEXT)")
+        raw.execute("INSERT INTO sessions VALUES (?, 'codex:a', ?)", procid.current_identity())
+    raw.close()
+    # Held open, so closing the last connection does not checkpoint the WAL
+    # away: the report's reader then pins frames a checkpoint has to wait for.
+    keeper = sqlite3.connect(db)
+    mailbox.send("a", "b", "c", db_path=db)
+    probed: Counter = Counter()
+    busy = []
+
+    def probe(pid, key):
+        probed[(pid, key)] += 1
+        writer = sqlite3.connect(db, timeout=0.1)
+        busy.append(writer.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0])
+        writer.close()
+        mailbox.send("a", "b", "c", db_path=db)  # new frames for the next probe
+        return procid.ALIVE
+
+    monkeypatch.setattr(report, "instance_state", probe)
+    report.report(db)
+    keeper.close()
+    assert probed and set(probed.values()) == {1}
+    assert busy and set(busy) == {0}
 
 
 def test_the_audit_never_writes(tmp_path):

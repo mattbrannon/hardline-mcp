@@ -2156,6 +2156,18 @@ def test_a_live_session_names_its_recorded_revision_until_it_dies(tmp_path, monk
     raw.close()
 
 
+def test_a_revision_goes_with_its_registry_rows_however_they_go(tmp_path):
+    db = tmp_path / "mb.db"
+    sessions.register(agent="codex", lane="codex:a", db_path=db)
+    sessions.record_revision("abc123", db_path=db)
+    assert sessions.unregister(db_path=db)
+
+    assert sessions.live(db_path=db) == []
+    raw = sqlite3.connect(db)
+    assert raw.execute("SELECT COUNT(*) FROM process_revisions").fetchone()[0] == 0
+    raw.close()
+
+
 @pytest.mark.anyio
 async def test_list_agents_names_the_revision_each_server_runs(codex_session, monkeypatch):
     from hardline_mcp import server
