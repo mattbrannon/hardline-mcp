@@ -257,6 +257,21 @@ _ADDED_COLUMNS = {
     "agent_sessions": {"host_pid": "INTEGER", "host_key": "TEXT"},
 }
 
+# Names every one of those columns and reads no row: preparing it fails with
+# "no such column" or "no such table" on a store that lacks one. Asked per
+# connection because initialization is cached per process: a store deleted and
+# rebuilt by an older revision is populated, so the cache skips it, and every
+# write naming a column it lacks failed for the rest of the process (#67).
+# Columns, not a version number: revisions on different branches share
+# numbers, and what writes need is the columns.
+_ADDED_COLUMNS_PROBE = (
+    "SELECT "
+    + ", ".join(f"{table}.{name}" for table, columns in _ADDED_COLUMNS.items() for name in columns)
+    + " FROM "
+    + ", ".join(_ADDED_COLUMNS)
+    + " WHERE 0"
+)
+
 
 def _add_missing_columns(conn: sqlite3.Connection) -> None:
     """Bring an older table up to the current shape. Idempotent."""
@@ -313,9 +328,8 @@ def _ensure_initialized(db_path: Path) -> None:
         # never re-initialized, and fails "no such table" for the rest of every
         # cached process's life. A real store is never zero bytes.
         #
-        # A file SWAPPED for a different populated one is still not caught:
-        # verifying the schema per connection would cost a query per operation
-        # to defend against something nobody does by accident.
+        # A file SWAPPED for a populated one, say rebuilt by an older revision,
+        # is caught by ``_connect``'s column check instead.
         try:
             if db_path.stat().st_size > 0:
                 return
@@ -367,12 +381,29 @@ def _ensure_initialized(db_path: Path) -> None:
 def _connect(db_path: Path) -> sqlite3.Connection:
     """Open a connection for a single operation. Schema + WAL are established
     once by ``_ensure_initialized``; ``busy_timeout`` makes concurrent writers
-    wait for the single WAL write lock rather than fail on a momentary lock."""
-    _ensure_initialized(db_path)
-    conn = sqlite3.connect(str(db_path), timeout=10.0)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=10000")
-    return conn
+    wait for the single WAL write lock rather than fail on a momentary lock.
+
+    A store missing columns this code writes is initialized again, once; one
+    that still lacks them is an error here, not a failure at some later write.
+    """
+    for _ in range(2):
+        _ensure_initialized(db_path)
+        conn = sqlite3.connect(str(db_path), timeout=10.0)
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout=10000")
+            conn.execute(_ADDED_COLUMNS_PROBE)
+            return conn
+        except sqlite3.OperationalError as exc:
+            conn.close()
+            if "no such column" not in str(exc) and "no such table" not in str(exc):
+                raise
+            missing = exc
+        except BaseException:
+            conn.close()
+            raise
+        _initialized_paths.discard(str(db_path))
+    raise sqlite3.OperationalError(f"{db_path} still lacks a column it needs: {missing}")
 
 
 def _lanes(owned: LaneSpec) -> tuple[str, ...]:

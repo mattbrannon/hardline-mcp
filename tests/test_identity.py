@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 
 import pytest
@@ -490,3 +491,71 @@ def test_additive_identity_migration_keeps_old_writers_compatible(tmp_path):
     )
     assert watch.read_pending(target) is False
     assert sessions.holders("codex:legacy", db_path=db)[0]["host_pid"] is None
+
+
+_PRE_IDENTITY_SCHEMA = mailbox._SCHEMA.replace("    owner_key    TEXT,\n", "").replace(
+    "    host_pid    INTEGER,\n    host_key    TEXT,\n", ""
+)
+
+
+def _rebuilt_by_an_older_revision(db, schema=_PRE_IDENTITY_SCHEMA):
+    """The store is deleted under the fleet and an older revision rebuilds it
+    first: populated, so a process that initialized the old file skips it."""
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            os.remove(f"{db}{suffix}")
+        except FileNotFoundError:
+            pass
+    with sqlite3.connect(db) as conn:
+        conn.executescript(schema)
+        conn.execute("INSERT INTO messages(sender,recipient,body,created_at) VALUES('a','b','c','t')")
+    conn.close()
+
+
+def _without(column):
+    schema, removed = re.subn(rf"\n\s+{column}\s+\w+,", "", mailbox._SCHEMA)
+    assert removed == 1, column
+    return schema
+
+
+@pytest.mark.parametrize(
+    "table, schema",
+    [
+        *((t, _without(c)) for t, columns in mailbox._ADDED_COLUMNS.items() for c in columns),
+        ("agent_sessions", mailbox._SCHEMA + "DROP TABLE agent_sessions;"),
+    ],
+    ids=[*(c for columns in mailbox._ADDED_COLUMNS.values() for c in columns), "no-table"],
+)
+def test_one_connection_restores_whatever_a_rebuild_left_out(tmp_path, table, schema):
+    db = tmp_path / "mb.db"
+    mailbox.send("a", "b", "c", db_path=db)
+    _rebuilt_by_an_older_revision(db, schema)
+
+    mailbox.send("a", "b", "c", db_path=db)
+    raw = sqlite3.connect(db)
+    present = {row[1] for row in raw.execute(f"PRAGMA table_info({table})")}
+    raw.close()
+    assert set(mailbox._ADDED_COLUMNS[table]) <= present
+
+
+def test_a_cached_process_survives_an_older_revisions_rebuild(tmp_path):
+    db = tmp_path / "mb.db"
+    assert sessions.register(agent="codex", lane="codex:one", db_path=db)["ok"]
+    _rebuilt_by_an_older_revision(db)
+
+    try:
+        registered = sessions.register(agent="codex", lane="codex:one", db_path=db)["ok"]
+    except sqlite3.OperationalError as exc:  # the defect: "no such column: host_pid"
+        registered = exc
+    assert registered is True
+    assert jobs.get(create(db), db_path=db)["owner_key"] == procid.process_key(os.getpid())
+
+
+def test_a_store_initialization_cannot_repair_fails_where_it_is_opened(tmp_path, monkeypatch):
+    db = tmp_path / "mb.db"
+    mailbox.send("a", "b", "c", db_path=db)
+    _rebuilt_by_an_older_revision(db)
+    monkeypatch.setattr(mailbox, "_add_missing_columns", lambda conn: None)
+
+    with pytest.raises(sqlite3.OperationalError, match="still lacks a column"):
+        mailbox.send("a", "b", "c", db_path=db)

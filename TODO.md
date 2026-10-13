@@ -4,12 +4,6 @@ The short list. Collaborative detail lives in
 [GitHub issues](https://github.com/sushiHex/hardline-mcp/issues); everything
 below is known and deliberate.
 
-## Open
-
-- **A cached process fails every registration after an older revision
-  rebuilds the store** (#67): columns added since a table first shipped are
-  applied only on a process's first initialization.
-
 ## Open design question
 
 **Stable instance addresses.** Ownership rests on reclaimable names, with
