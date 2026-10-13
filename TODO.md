@@ -1,81 +1,49 @@
 # TODO
 
-Open work, roughly in the order it is worth doing. Everything here is known and
-deliberate — nothing below is a surprise waiting to be discovered.
+The short list. Collaborative detail lives in
+[GitHub issues](https://github.com/sushiHex/hardline-mcp/issues); everything
+below is known and deliberate.
 
-## Verify session-to-session addressing for real
+## Open
 
-Two live agent sessions have never exchanged a message through a claimed lane.
-It is proven by tests, by 75 mutations, and by a smoke run against the real
-store — but nobody has watched it work.
+- **Verify async Codex jobs from Claude after an MCP reconnect** (#32): submit,
+  completion notice, and `job_result`, through a connected server rather than
+  the adapter alone.
 
-The check is small:
+## Open design question
 
-1. Restart a Codex terminal session so it picks up current code. It should
-   appear in `list_agents()` under `live_sessions` **on its own** — no
-   `register_session` call, no config change.
-2. From another session: `send(from_agent="claude", to_agent="codex:<lane>",
-   message="ping")`.
-3. In the Codex session: `inbox(agent="codex")` should return it, and
-   `acked_at` should be set — consumable, not merely visible.
-
-If step 1 shows nothing, that is the finding. Check `server_info()` for
-`code_revision` and `registration_warning`.
-
-## Commit the mutation harness
-
-`CLAUDE.md` says to mutation-test every fix, and the harness that did it is not
-in this repo — it lived in a scratch directory and is gone. That makes the most
-important habit here unreproducible.
-
-It is a small script: a list of `(name, file, old_text, new_text, tests that
-must fail)`, applying each edit, running the named tests, asserting they FAIL,
-and restoring in a `finally`. Two things it must do, both learned the hard way:
-assert each anchor appears **exactly once** before applying (a stale anchor
-otherwise reports a kill for a mutation never applied), and refuse a `-k`
-selector that matches no tests (it "passes" vacuously).
-
-## Decide the ownership model
-
-The design review argued that absence-based ownership is the wrong foundation:
-that a stable *instance* address should be separate from a human *display*
-label, so a name is never transferred and absence never grants ownership. It was
-not adopted — absence was made insufficient instead, requiring positive evidence
-before a claim.
-
-That is a hardening, not an answer. Worth settling before more is built on it.
+**Stable instance addresses.** Ownership rests on reclaimable names, with
+absence made insufficient rather than replaced: a claim needs evidence. A
+2026-10-13 design pass deferred a separate instance address against stated
+criteria and recorded when to revisit; see "Stable instance addresses" under
+[Decisions](docs/architecture.md#decisions-and-what-was-rejected).
 
 ## Known limits, each a deliberate trade
 
-**Mixed revisions are half-blind.** Older processes read and write the `sessions`
-table; current code uses `agent_sessions` and consults both for ownership. That
-closes this side only — an older process will not read the new table whatever we
-write. It resolves itself as old processes exit. The orphan `sessions` table can
-be dropped once none remain.
+**Mixed revisions are half-blind.** Older processes read and write the
+`sessions` table; current code uses `agent_sessions` and consults both for
+ownership. That closes this side only: an older process will not read the new
+table whatever we write. It resolves itself as old processes exit, and the
+orphan `sessions` table can be dropped once none remain.
 
-**An orphaned server holds its lane.** The registry records the hardline
-process's pid, not the session's. If an agent session exits and leaves its
-hardline running, that process stays alive, stays registered, and holds a lane
-nobody is reading. `atexit` does not cover it — the parent's exit does not run
-the child's handlers. Fix would be to store the session anchor's pid and token
-beside the server's, and require both live.
-
-**macOS has no process identity.** `procid.process_key` returns `None` there
-(no `/proc`, and `proc_pidinfo` is not wired up), so identity degrades to the
-pid alone and reuse is undetectable. Windows and Linux are covered.
-
-**A job owner has no creation token.** `jobs.owner_pid` has no `owner_key`
-beside it the way `child_pid` has `child_key`, so a reused owner pid can block a
-lane claim. It fails in the safe direction — refusing rather than stealing.
+**macOS has no creation tokens.** `procid.process_key` returns `None` there
+(`proc_pidinfo` is not wired up). A record without a token is honoured on pid
+liveness alone, so a reused pid passes for its process: it can keep a lane held
+or a job looking owned, which refuses rather than steals. A bound launching
+host without a token is `unknown`, never verified alive, so it blocks a
+takeover. Instance-bound watchers cannot be armed. Windows and Linux are
+covered.
 
 **`claim` probes the OS inside `BEGIN IMMEDIATE`.** It holds the single writer
-while checking job owners. The row count is normally zero or one, so it is
-microseconds, but it is the writer lock.
+while checking holders and job owners. The row count is normally zero or one,
+so it is microseconds, but it is the writer lock.
 
-## Test-infrastructure fix
+## Shipped since this list was written
 
-The mailbox seat belt in `tests/conftest.py` counts messages in the operator's
-real store around the whole run, so any other live agent session writing during
-a local run reads as a leak. It should compare *identity* rather than count —
-record `MAX(id)` before, then inspect what actually arrived — so a real leak is
-still caught and concurrent traffic is not misreported.
+- Session-to-session mail watched working on the real store, Claude to Codex
+  and Claude to Claude (see "Not yet verified live" in `CLAUDE.md`).
+- The mutation harness and an isolated test store (#25): `scripts/mutate.py`,
+  `tests/mutations.json`, run in CI.
+- Process-instance binding (#29): job owners carry `owner_key`, and a session
+  whose launching host exited is dead, so an orphaned server no longer holds
+  its lane.
