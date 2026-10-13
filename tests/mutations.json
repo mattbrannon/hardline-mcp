@@ -298,10 +298,11 @@
   },
   "codex-path-precedence": {
     "file": "hardline_mcp/adapters.py",
-    "before": "        exe = shutil.which(default_exe) or _discover_codex()",
-    "after": "        exe = _discover_codex() or shutil.which(default_exe)",
+    "before": "        if exe := shutil.which(default_exe):\n            return AgentCommand(exe, \"path\")\n        if exe := _discover_codex():\n            return AgentCommand(exe, \"legacy_discovery\")\n",
+    "after": "        if exe := _discover_codex():\n            return AgentCommand(exe, \"legacy_discovery\")\n        if exe := shutil.which(default_exe):\n            return AgentCommand(exe, \"path\")\n",
     "tests": [
-      "tests/test_adapters.py::test_ask_codex_shells_codex_exec"
+      "tests/test_adapters.py::test_ask_codex_shells_codex_exec",
+      "tests/test_adapters.py::test_codex_command_override_and_fallback_precedence"
     ]
   },
   "codex-family-trigger": {
@@ -2557,6 +2558,30 @@
     "after": "        _register_session_impl, label, agent, wait\n",
     "tests": [
       "tests/test_sessions.py::test_register_session_does_not_hold_a_shared_worker_slot"
+    ]
+  },
+  "server-info-names-the-rule-that-chose": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "            return AgentCommand(exe, \"legacy_discovery\")\n",
+    "after": "            return AgentCommand(exe, \"path\")\n",
+    "tests": [
+      "tests/test_adapters.py::test_codex_command_override_and_fallback_precedence"
+    ]
+  },
+  "server-info-reports-a-failed-resolution-not-a-guess": {
+    "file": "hardline_mcp/server.py",
+    "before": "            commands[agent] = {\"error\": f\"{type(exc).__name__}: {exc}\"}\n",
+    "after": "            commands[agent] = {\"executable\": agent, \"source\": \"bare\"}\n",
+    "tests": [
+      "tests/test_server.py::test_a_failed_resolution_is_that_agents_error_alone"
+    ]
+  },
+  "dispatch-and-diagnostic-share-one-resolver": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "    return [agent_command(agent).executable, *_DISPATCH[agent][1]]\n",
+    "after": "    default_exe, subcmd, env_var = _DISPATCH[agent]\n    return [os.environ.get(env_var) or default_exe, *subcmd]\n",
+    "tests": [
+      "tests/test_server.py::test_server_info_reports_what_dispatch_would_run"
     ]
   }
 }

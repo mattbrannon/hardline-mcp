@@ -2478,28 +2478,33 @@ def test_codex_discovery_returns_none_when_absent(monkeypatch, tmp_path):
     assert adapters._discover_codex() is None
 
 
-def test_codex_prefix_override_and_fallback_precedence(monkeypatch):
+def test_codex_command_override_and_fallback_precedence(monkeypatch):
+    """Each rung, and the name of the rule that chose it (server_info reports it)."""
     monkeypatch.setattr(adapters.shutil, "which", lambda _: "C:/path/codex.exe")
     monkeypatch.setattr(adapters, "_discover_codex", lambda: "C:/legacy/codex.exe")
 
-    # The operator's explicit override remains authoritative.
+    # The operator's explicit override remains authoritative; empty is unset.
     monkeypatch.setenv("HARDLINE_CODEX_CMD", "C:/pinned/codex.exe")
-    assert adapters._prefix_for("codex")[0] == "C:/pinned/codex.exe"
+    assert adapters.agent_command("codex") == ("C:/pinned/codex.exe", "override")
+    monkeypatch.setenv("HARDLINE_CODEX_CMD", "")
+    assert adapters.agent_command("codex") == ("C:/path/codex.exe", "path")
 
     # PATH is the preferred automatic resolution channel.
     monkeypatch.delenv("HARDLINE_CODEX_CMD", raising=False)
-    assert adapters._prefix_for("codex")[0] == "C:/path/codex.exe"
+    assert adapters.agent_command("codex") == ("C:/path/codex.exe", "path")
 
     # Legacy discovery and then the bare command remain fallbacks.
     monkeypatch.setattr(adapters.shutil, "which", lambda _: None)
-    assert adapters._prefix_for("codex")[0] == "C:/legacy/codex.exe"
+    assert adapters.agent_command("codex") == ("C:/legacy/codex.exe", "legacy_discovery")
     monkeypatch.setattr(adapters, "_discover_codex", lambda: None)
-    assert adapters._prefix_for("codex")[0] == "codex"
+    assert adapters.agent_command("codex") == ("codex", "bare")
 
 
 def test_non_codex_agents_have_no_discovery(monkeypatch):
     # hermes/claude resolve to bare default when no env override; no discovery.
+    monkeypatch.setattr(adapters.shutil, "which", lambda _: "C:/path/hermes.exe")
     monkeypatch.delenv("HARDLINE_HERMES_CMD", raising=False)
+    assert adapters.agent_command("hermes") == ("hermes", "bare")
     assert adapters._prefix_for("hermes")[0] == "hermes"
 
 
