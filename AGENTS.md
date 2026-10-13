@@ -17,7 +17,7 @@ Use Python 3.10+ in a virtual environment.
 - `python -m pip wheel --no-deps . -w dist`: build a wheel using Hatchling.
 - `hardline-mcp`: start the stdio MCP server; it waits for client input.
 
-CI tests Python 3.10 and 3.14 on Ubuntu and Windows, runs the mutation catalog, and runs the live sandbox tests on Linux and macOS.
+CI tests Python 3.10 and 3.14 on Ubuntu, Windows and macOS, runs the mutation catalog, and runs the live sandbox tests on Linux and macOS.
 
 ## Coding Style & Naming Conventions
 

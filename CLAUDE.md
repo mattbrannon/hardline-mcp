@@ -19,7 +19,7 @@ python scripts/mutate.py [case ...] [--jobs N]  # regression mutations (tests/mu
 ```
 
 No linter or formatter is configured. CI (`.github/workflows/ci.yml`) runs three
-jobs side by side: the suite on Ubuntu + Windows, Python 3.10 and 3.14, in
+jobs side by side: the suite on Ubuntu + Windows + macOS, Python 3.10 and 3.14, in
 xdist workers, then an import of `hardline_mcp.server` to check that the tools
 register; the mutation catalog once; and the live sandbox tests on Linux and
 macOS. Don't run `hardline-mcp` by hand to test it. It is a stdio server and
