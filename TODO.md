@@ -10,19 +10,26 @@ below is known and deliberate.
 absence made insufficient rather than replaced: a claim needs evidence. A
 2026-10-13 design pass deferred a separate instance address against stated
 criteria and recorded when to revisit; see "Stable instance addresses" under
-[Decisions](docs/architecture.md#decisions-and-what-was-rejected). Acks are now
-recorded (`acked_by`), so its misdelivery trigger can be checked.
+[Decisions](docs/architecture.md#decisions-and-what-was-rejected).
+
+**Review it on or after 2026-10-27, with `hardline-mcp report`.** By then most
+servers run code that records revisions and acks. Against the triggers:
+- *Misdelivery.* Read `job_notices.other_instance_sample`. An entry is a
+  relaunch when the acker's `conversation` is the one the requester lane was
+  derived from (its suffix carries the id's first eight characters) or one
+  that claimed that lane; anything else is a candidate misdelivery to trace.
+  Baseline 2026-10-13: 3 of 128 acked notices `other_instance`, all a relaunch
+  of the dispatching conversation; 0 `same_instance`, 125 `unknown` (acked
+  before acks were recorded).
+- *Legacy writers retired.* Holds since 2026-10-13: a precondition for a
+  recipient-format change, not a reason for one.
+- *Handover with jobs outstanding, contested names or the claim cap blocking
+  real claims.* From the sessions in use.
+
+Record the outcome in `docs/architecture.md` and, if deferring again, a new
+date here.
 
 ## Known limits, each a deliberate trade
-
-**Mixed revisions are half-blind.** Older processes read and write the
-`sessions` table; current code uses `agent_sessions` and consults both for
-ownership. That closes this side only: an older process will not read the new
-table whatever we write. It resolves itself as old processes exit, and the
-orphan `sessions` table can be dropped once none remain. `hardline-mcp report`
-shows the revisions registered servers run and any live legacy writer; a
-process that never registers stays invisible, so an empty answer is evidence,
-not proof.
 
 **A record without a creation token is honoured on pid liveness alone.** Every
 platform reads one now (macOS since #69), but rows written before that, or
@@ -45,3 +52,6 @@ so it is microseconds, but it is the writer lock.
   its lane.
 - Async Codex from Claude across an MCP reconnect, watched live (#32), and
   `server_info().agent_commands` naming the executable a spawn runs (#33).
+- Ownership no longer reads the pre-`agent_sessions` registry: no process can
+  still write it (see "Retiring the legacy registry" in
+  `docs/architecture.md`).

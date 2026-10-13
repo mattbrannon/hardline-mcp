@@ -225,9 +225,11 @@ CREATE INDEX IF NOT EXISTS agent_sessions_lane_idx ON agent_sessions (lane);
 # calls itself 4.
 #
 # A distinct name removes the whole class of failure instead of racing better.
-# Old revisions keep writing to `sessions`, this one owns `agent_sessions`, and
+# Old revisions kept writing to `sessions`, this one owns `agent_sessions`, and
 # nothing ever has to drop anything. The orphan table is small and harmless;
-# destroying another process's registrations is neither.
+# destroying another process's registrations is neither. Ownership stopped
+# reading it once no process could still write it (docs/architecture.md,
+# "Retiring the legacy registry").
 
 # One-time per-db init (schema + WAL) is guarded so it happens exactly once
 # per process per path. WAL is a *persistent* DB-header property, so setting it

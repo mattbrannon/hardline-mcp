@@ -313,39 +313,6 @@ def test_registration_still_refreshes_a_lane_this_process_already_holds(tmp_path
     assert again["contested"] == []
 
 
-def test_a_legacy_holder_is_visible_to_the_new_table(tmp_path):
-    """Renaming the table bought a split-brain, and this closes half of it.
-
-    A process on older code writes `sessions` and reads only `sessions`. Unless
-    ownership questions consult both, each cohort hands out lanes the other is
-    holding — the failure the registry exists to prevent, reintroduced by the
-    fix for a different one.
-    """
-    db = tmp_path / "mb.db"
-    other = os.getppid()
-    if other in (0, os.getpid()) or not procid.pid_alive(other):
-        pytest.skip("no second live pid available")
-
-    sessions.register(agent="codex", lanes=["codex:x"], db_path=db)  # builds schema
-    with mailbox._connect(db) as conn:
-        with conn:
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS sessions (pid INTEGER PRIMARY KEY,"
-                " agent TEXT, lane TEXT, label TEXT, process_key TEXT, cwd TEXT,"
-                " started_at TEXT, last_seen TEXT)"
-            )
-            conn.execute(
-                "INSERT INTO sessions (pid, agent, lane, label, process_key, cwd,"
-                " started_at, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (other, "codex", "codex:legacy", None, procid.process_key(other),
-                 "old", "2026-08-31T00:00:00Z", "2026-08-31T00:00:00Z"),
-            )
-
-    assert [h["pid"] for h in sessions.holders("codex:legacy", db_path=db)] == [other]
-    refused = sessions.claim(agent="codex", label="legacy", db_path=db)
-    assert refused["ok"] is False, "a lane an older process holds is not free"
-
-
 def test_a_holder_reports_which_kind_of_live_it_is(tmp_path, monkeypatch):
     """UNKNOWN was folded into "live" and then reported as a live session.
 
