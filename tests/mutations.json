@@ -202,8 +202,8 @@
   },
   "lane-consumption-transaction": {
     "file": "hardline_mcp/server.py",
-    "before": "return operation(*args, owned=verify, db_path=db_path, **kwargs)",
-    "after": "return operation(*args, owned=owned, db_path=db_path, **kwargs)",
+    "before": "            owned=verify,\n",
+    "after": "            owned=owned,\n",
     "tests": [
       "tests/test_ownership.py::test_consumption_rechecks_conflict_after_preflight"
     ]
@@ -2582,6 +2582,55 @@
     "after": "    default_exe, subcmd, env_var = _DISPATCH[agent]\n    return [os.environ.get(env_var) or default_exe, *subcmd]\n",
     "tests": [
       "tests/test_server.py::test_server_info_reports_what_dispatch_would_run"
+    ]
+  },
+  "a-consuming-read-records-who-acked": {
+    "file": "hardline_mcp/mailbox.py",
+    "before": "                        _record_acks(conn, ackable, conversation)\n",
+    "after": "",
+    "tests": [
+      "tests/test_mailbox.py::test_a_consuming_read_records_who_acked_exactly_what_it_consumed",
+      "tests/test_server.py::test_reads_and_acks_record_this_process_and_conversation"
+    ]
+  },
+  "only-an-ack-that-took-effect-is-recorded": {
+    "file": "hardline_mcp/mailbox.py",
+    "before": "            if cur.rowcount:\n                _record_acks(conn, [message_id], conversation)\n",
+    "after": "            _record_acks(conn, [message_id], conversation)\n",
+    "tests": [
+      "tests/test_mailbox.py::test_only_the_ack_that_took_effect_is_recorded"
+    ]
+  },
+  "acks-record-the-conversation": {
+    "file": "hardline_mcp/server.py",
+    "before": "            conversation=adapters.conversation_id(),\n",
+    "after": "            conversation=None,\n",
+    "tests": [
+      "tests/test_server.py::test_reads_and_acks_record_this_process_and_conversation"
+    ]
+  },
+  "a-consuming-read-and-its-record-commit-together": {
+    "file": "hardline_mcp/mailbox.py",
+    "before": "                        _record_acks(conn, ackable, conversation)\n",
+    "after": "                        conn.commit()\n                        _record_acks(conn, ackable, conversation)\n",
+    "tests": [
+      "tests/test_mailbox.py::test_an_ack_and_its_record_commit_together[inbox]"
+    ]
+  },
+  "an-ack-and-its-record-commit-together": {
+    "file": "hardline_mcp/mailbox.py",
+    "before": "            if cur.rowcount:\n                _record_acks(conn, [message_id], conversation)\n",
+    "after": "            if cur.rowcount:\n                conn.commit()\n                _record_acks(conn, [message_id], conversation)\n",
+    "tests": [
+      "tests/test_mailbox.py::test_an_ack_and_its_record_commit_together[ack]"
+    ]
+  },
+  "peek-reads-one-snapshot": {
+    "file": "hardline_mcp/mailbox.py",
+    "before": "        conn.execute(\"BEGIN\")\n        try:\n            recorded = conn.execute(\n",
+    "after": "        try:\n            recorded = conn.execute(\n",
+    "tests": [
+      "tests/test_mailbox.py::test_peek_reads_an_ack_and_its_acker_from_one_snapshot"
     ]
   }
 }

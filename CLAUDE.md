@@ -257,5 +257,8 @@ receipted), in a busy one (read between tool calls), and in a `claude -p`
 worker; `crossSessionInbound` `hold` and `refuse` block it, as documented. A
 move to the background (`/bg`, 2.1.296) ends the old host; the background
 conversation reclaimed its old lane and read its mail, given a turn by a
-`SessionStart` fork hook. Still unobserved: inbox wake on Linux or macOS. See
+`SessionStart` fork hook. An async Codex job survived an MCP reconnect: a
+`claude -p` submitted it and exited at completion, and `--resume` (a new server,
+the same lane) received its inbox notice, read the one completion notice and
+got the full result (#32). Still unobserved: inbox wake on Linux or macOS. See
 `docs/claude-inbox-wake.md`.
