@@ -78,7 +78,7 @@ from .mailbox import PROCESS_REVISIONS_TABLE, _connect, _default_now, _iso, _res
 from .procid import ALIVE, DEAD, UNKNOWN, current_identity, instance_state, process_key
 
 
-def _row_to_dict(row: sqlite3.Row) -> dict:
+def _row_to_dict(row: sqlite3.Row, probe: Callable[..., str] = None) -> dict:
     return {
         "lane": row["lane"],
         "agent": row["agent"],
@@ -95,16 +95,17 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
         # as telling a sender nothing can consume their message: the honest
         # word is that the process could not be probed, and a caller cannot
         # recover that from a boolean.
-        "liveness": _state(row),
+        "liveness": _state(row, probe),
     }
 
 
-def _state(row: sqlite3.Row) -> str:
-    """``ALIVE`` / ``DEAD`` / ``UNKNOWN`` for the process behind this row."""
-    state = instance_state(row["pid"], row["process_key"])
+def _state(row: sqlite3.Row, probe: Callable[..., str] = None) -> str:
+    """``ALIVE`` / ``DEAD`` / ``UNKNOWN`` for the process behind this row.
+    ``probe`` stands in for ``instance_state`` here and in ``host_state``."""
+    state = (probe or instance_state)(row["pid"], row["process_key"])
     if state == DEAD:
         return state
-    host = host_state(row)
+    host = host_state(row, probe)
     if host == DEAD:
         return DEAD
     return UNKNOWN if UNKNOWN in (state, host) else state
@@ -119,7 +120,7 @@ def host_state(row: sqlite3.Row, probe: Callable[..., str] = None) -> str:
     return UNKNOWN if row["host_key"] is None and state == ALIVE else state
 
 
-def _is_live(row: sqlite3.Row) -> bool:
+def _is_live(row: sqlite3.Row, probe: Callable[..., str] = None) -> bool:
     """May this row still be treated as a destination?
 
     UNKNOWN counts as live. A probe that could not answer is not evidence of
@@ -127,7 +128,7 @@ def _is_live(row: sqlite3.Row) -> bool:
     optimistically means reporting a destination that has gone, while being
     wrong pessimistically means handing a live session's name to somebody else.
     """
-    return _state(row) != DEAD
+    return _state(row, probe) != DEAD
 
 
 def _prune_dead(conn: sqlite3.Connection) -> None:
@@ -205,7 +206,7 @@ def _revisions(conn: sqlite3.Connection) -> dict[tuple, str]:
     return {(pid, key): revision for pid, key, revision in rows}
 
 
-def _live_work(conn: sqlite3.Connection, lane: str) -> list[dict]:
+def _live_work(conn: sqlite3.Connection, lane: str, probe: Callable[..., str] = None) -> list[dict]:
     """Unfinished jobs whose results are owed to ``lane``, held by a LIVE owner.
 
     The registry cannot see every consumer. A process running older code never
@@ -233,7 +234,7 @@ def _live_work(conn: sqlite3.Connection, lane: str) -> list[dict]:
             "label": r["label"],
         }
         for r in rows
-        if instance_state(r["owner_pid"], r["owner_key"]) != DEAD
+        if (probe or instance_state)(r["owner_pid"], r["owner_key"]) != DEAD
     ]
 
 
@@ -321,10 +322,13 @@ def _upsert(
         )
 
 
-def _refusal(conn, lane: str, pid: int) -> dict | None:
-    """One ownership rule; acquisition reserves the writer before evaluating it."""
+def _refusal(conn, lane: str, pid: int, probe: Callable[..., str] = None) -> dict | None:
+    """One ownership rule; acquisition reserves the writer before evaluating it.
+    ``probe`` stands in for ``instance_state`` in every liveness question."""
     rows = list(conn.execute("SELECT * FROM agent_sessions WHERE lane = ?", (lane,)))
-    existing = [_row_to_dict(r) for r in rows if r["pid"] != pid and _is_live(r)]
+    existing = [
+        _row_to_dict(r, probe) for r in rows if r["pid"] != pid and _is_live(r, probe)
+    ]
     if existing:
         held_by = ", ".join(
             f"pid {h['pid']} ({h['liveness']}, {h['cwd']})" for h in existing
@@ -349,7 +353,7 @@ def _refusal(conn, lane: str, pid: int) -> dict | None:
     # No REGISTERED holder is not the same as no holder. Before taking
     # a name on the strength of an empty table, look for work that is
     # still owed to it and still owned by something alive.
-    outstanding = [j for j in _live_work(conn, lane) if j["owner_pid"] != pid]
+    outstanding = [j for j in _live_work(conn, lane, probe) if j["owner_pid"] != pid]
     if outstanding:
         which = ", ".join(
             f"{j['job_id']} ({j['state']}, owner pid {j['owner_pid']})"
@@ -397,11 +401,24 @@ def _acquire(
     key = current_identity()[1] if pid == os.getpid() else process_key(pid)
     accepted, refused = [], []
     inherited = 0
+    # Probed before the single writer is reserved, not while holding it: the
+    # rule runs once outside, and inside an answer that REFUSES (alive,
+    # unknown) is reused, while one that would grant (dead) is asked again.
+    # A stale reuse can only refuse, never hand a live holder's name away.
+    asked: dict[tuple, str] = {}
+
+    def probe(pid_: int, key_: Optional[str]) -> str:
+        if asked.get((pid_, key_), DEAD) == DEAD:
+            asked[(pid_, key_)] = instance_state(pid_, key_)
+        return asked[(pid_, key_)]
+
     with closing(_connect(_resolve_db(db_path))) as conn:
+        for lane in requested:
+            _refusal(conn, lane, pid, probe)
         with conn:
             conn.execute("BEGIN IMMEDIATE")
             for lane in requested:
-                refusal = _refusal(conn, lane, pid)
+                refusal = _refusal(conn, lane, pid, probe)
                 if refusal:
                     if atomic:
                         conn.rollback()

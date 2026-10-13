@@ -130,8 +130,8 @@
   },
   "owner-work-token": {
     "file": "hardline_mcp/sessions.py",
-    "before": "instance_state(r[\"owner_pid\"], r[\"owner_key\"])",
-    "after": "instance_state(r[\"owner_pid\"], None)",
+    "before": "(probe or instance_state)(r[\"owner_pid\"], r[\"owner_key\"])",
+    "after": "(probe or instance_state)(r[\"owner_pid\"], None)",
     "tests": [
       "tests/test_identity.py::test_work_owned_by_reused_pid_does_not_block_role"
     ]
@@ -2752,6 +2752,30 @@
     "after": "    \"sessions\": \"SELECT * FROM agent_sessions ORDER BY pid, seq\",\n",
     "tests": [
       "tests/test_report.py::test_a_registry_missing_a_column_reads_unavailable_even_when_empty"
+    ]
+  },
+  "a-claim-probes-before-the-writer": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "        for lane in requested:\n            _refusal(conn, lane, pid, probe)\n        with conn:\n",
+    "after": "        with conn:\n",
+    "tests": [
+      "tests/test_sessions.py::test_a_claim_probes_before_it_reserves_the_writer"
+    ]
+  },
+  "the-writer-reuses-the-earlier-answers": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                refusal = _refusal(conn, lane, pid, probe)\n",
+    "after": "                refusal = _refusal(conn, lane, pid)\n",
+    "tests": [
+      "tests/test_sessions.py::test_a_claim_probes_before_it_reserves_the_writer"
+    ]
+  },
+  "an-answer-that-would-grant-is-asked-again": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "        if asked.get((pid_, key_), DEAD) == DEAD:\n",
+    "after": "        if (pid_, key_) not in asked:\n",
+    "tests": [
+      "tests/test_sessions.py::test_an_answer_that_would_grant_is_asked_again_inside_the_writer"
     ]
   }
 }
