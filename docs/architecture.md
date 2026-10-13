@@ -208,8 +208,7 @@ Mitigations short of a migration, both built (2026-10-13):
 Revisit when any of these holds:
 - a role must be handed over while jobs are outstanding;
 - contested names or the claim cap block real claims;
-- recorded provenance shows misdelivery. This needs provenance first: messages
-  store neither whom they were resolved for nor who consumed them;
+- recorded provenance shows misdelivery (see "Who acked a message" below);
 - every writer that predates `agent_sessions` has been retired, the
   precondition for any change of recipient format.
 
@@ -220,6 +219,36 @@ Review record (gpt-6-astra), adopted:
   recipient identity away.
 - **Two proposed triggers were dropped.** "Codex exposes its thread id" has
   already happened, through `_meta`. A fork parent id proves only ancestry.
+
+**Who acked a message (2026-10-13).** The misdelivery trigger could not fire
+while nothing recorded who read what. Each acknowledgement on current code now
+records its process (pid and creation token) and the Claude conversation its
+server was started for, in `message_acks`, inside the acknowledging
+transaction; `peek` reports it as `acked_by`. Only an ack that took effect is
+recorded. No row for an acked message means an older revision acked it, which
+is unknown, not a match.
+
+That makes the documented failure checkable: a job's notice is meant for the
+process that dispatched the job (`jobs.owner_pid`, `owner_key`; the notice body
+names the job), so a notice acked by another instance is a result read
+elsewhere. Its conversation tells a relaunch of the same Claude conversation
+from a different one, as a correlation: the id is the one the server was
+started under, and two windows can share it. Ordinary mail has no recorded
+intent, so a different acker there is a difference to interpret, not a verdict.
+An ack is not receipt either: a consuming read commits before its response
+reaches the caller.
+
+Review record (gpt-6-astra), on a larger first design that also snapshotted a
+lane's holders at send time:
+- **Holders at send are candidates, not the recipient,** and a job notice is
+  inserted at completion while its recipient was fixed at dispatch, so a
+  replacement holder would have looked correctly addressed. The job row already
+  holds the dispatch intent; nothing is snapshotted at send.
+- **A `conversation` column on `agent_sessions` was dropped.** A store an older
+  revision rebuilds under a process that cached its initialization lacks added
+  columns, so registration would fail; the existing host columns already do
+  (#67). Acks go in a table created on use inside the acking transaction.
+- **Not adopted: an explicit job-id column.** The notice body carries the job id.
 
 ## Why read controls are explicit
 

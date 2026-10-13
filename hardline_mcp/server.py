@@ -721,7 +721,13 @@ def _consume(operation, *args, **kwargs):
                 _registration_failure[:] = [f"{type(exc).__name__}: {exc}"]
                 return ()
 
-        return operation(*args, owned=verify, db_path=db_path, **kwargs)
+        return operation(
+            *args,
+            owned=verify,
+            conversation=adapters.conversation_id(),
+            db_path=db_path,
+            **kwargs,
+        )
 
 
 @mcp.tool()
@@ -1301,7 +1307,8 @@ async def peek(message_id: int) -> dict:
     The escape hatch for a message ``inbox`` shortened. Read-only: unlike
     ``inbox`` this never acks, and it is deliberately not lane-scoped for the
     same reason ``history`` is not — recovering a payload another session
-    already consumed is exactly what it is for.
+    already consumed is exactly what it is for. ``acked_by`` names the
+    process, and Claude conversation, that acknowledged it.
 
     Returns ``{"ok": true, "message": {...}}`` or ``{"ok": false, "error"}``.
     """

@@ -69,6 +69,63 @@ def test_ack_unknown_id_returns_false(tmp_path):
     assert mailbox.ack(99999, db_path=db)["ok"] is False
 
 
+def _acker(monkeypatch, pid):
+    monkeypatch.setattr(mailbox, "current_identity", lambda: (pid, f"token-{pid}"))
+
+
+def test_a_consuming_read_records_who_acked_exactly_what_it_consumed(tmp_path, monkeypatch):
+    db = tmp_path / "mb.db"
+    mine = mailbox.send("codex", "claude:a", "mine", db_path=db)
+    theirs = mailbox.send("codex", "claude:b", "theirs", db_path=db)
+    browsed = mailbox.send("codex", "hermes", "browsed", db_path=db)
+    _acker(monkeypatch, 41)
+
+    mailbox.inbox("hermes", auto_ack=False, db_path=db)
+    mailbox.inbox(["claude:a", "claude:b"], owned="claude:a", conversation="c-1", db_path=db)
+
+    assert mailbox.peek(mine["message_id"], db_path=db)["acked_by"] == {
+        "pid": 41,
+        "process_key": "token-41",
+        "conversation": "c-1",
+    }
+    assert mailbox.peek(theirs["message_id"], db_path=db)["acked_by"] is None
+    assert mailbox.peek(browsed["message_id"], db_path=db)["acked_by"] is None
+
+
+def test_only_the_ack_that_took_effect_is_recorded(tmp_path, monkeypatch):
+    db = tmp_path / "mb.db"
+    sent = mailbox.send("codex", "claude:a", "x", db_path=db)
+    _acker(monkeypatch, 41)
+    assert mailbox.ack(sent["message_id"], owned="claude:b", db_path=db)["ok"] is False
+    assert mailbox.peek(sent["message_id"], db_path=db)["acked_by"] is None
+
+    assert mailbox.ack(sent["message_id"], owned="claude:a", conversation="first", db_path=db)["ok"]
+    _acker(monkeypatch, 42)
+    assert not mailbox.ack(sent["message_id"], owned="claude:a", conversation="second", db_path=db)["ok"]
+    assert mailbox.peek(sent["message_id"], db_path=db)["acked_by"]["conversation"] == "first"
+
+
+def test_an_ack_nothing_recorded_reads_unknown(tmp_path, monkeypatch):
+    """An older revision acks without recording, and may rebuild the store
+    without the table under a process that already initialized it."""
+    import sqlite3
+
+    db = tmp_path / "mb.db"
+    old = mailbox.send("codex", "hermes", "acked by older code", db_path=db)
+    raw = sqlite3.connect(str(db))
+    with raw:
+        raw.execute("DROP TABLE message_acks")
+        raw.execute("UPDATE messages SET acked_at = 'then' WHERE id = ?", (old["message_id"],))
+    raw.close()
+    got = mailbox.peek(old["message_id"], db_path=db)
+    assert (got["acked_at"], got["acked_by"]) == ("then", None)
+
+    new = mailbox.send("codex", "hermes", "acked by current code", db_path=db)
+    _acker(monkeypatch, 43)
+    mailbox.inbox("hermes", db_path=db)
+    assert mailbox.peek(new["message_id"], db_path=db)["acked_by"]["pid"] == 43
+
+
 def test_ack_is_idempotent(tmp_path):
     db = tmp_path / "mb.db"
     now_fn = _clock(_T0)

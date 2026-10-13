@@ -152,6 +152,23 @@ async def test_inbox_sees_own_lane_and_broadcasts_but_not_other_sessions(
 
 
 @pytest.mark.anyio
+async def test_reads_and_acks_record_this_process_and_conversation(
+    monkeypatch, tmp_path, in_session
+):
+    db = tmp_path / "mb.db"
+    monkeypatch.setenv("HARDLINE_DB", str(db))
+    read = server.mailbox.send("codex", f"claude:{in_session}", "read", db_path=db)
+    await server.inbox(agent="claude")
+    acked = server.mailbox.send("codex", "claude", "acked", db_path=db)
+    assert (await server.ack(message_id=acked["message_id"]))["ok"] is True
+
+    pid, key = server.procid.current_identity()
+    me = {"pid": pid, "process_key": key, "conversation": "1a2b3c4d-dead-beef-0000-000000000000"}
+    for sent in (read, acked):
+        assert (await server.peek(sent["message_id"]))["message"]["acked_by"] == me
+
+
+@pytest.mark.anyio
 async def test_ack_refuses_another_sessions_message(monkeypatch, tmp_path, in_session):
     db = tmp_path / "mb.db"
     monkeypatch.setenv("HARDLINE_DB", str(db))

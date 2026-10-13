@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Union
 
+from .procid import current_identity
+
 # "Which lanes does this caller own": none, one, or several. Several arises
 # once a session can be renamed - see _lanes.
 LaneSpec = Union[str, Iterable[str], None]
@@ -43,7 +45,7 @@ def _resolve_db(db_path: Optional[Path]) -> Path:
 # Bumped when a table is added or a column's meaning changes. Recorded in
 # `meta` so a running server can report what store it is talking to rather
 # than leaving "is this the new schema?" to be inferred from behaviour.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Facts a serving process records about its own channel pushes; readers derive
 # the delivery state (see ``delivery``). Also created by ``delivery`` on use: a
@@ -74,7 +76,27 @@ CREATE TABLE IF NOT EXISTS lane_hints (
 CREATE INDEX IF NOT EXISTS lane_hints_conversation_idx ON lane_hints (conversation);
 """
 
-_SCHEMA = PUSH_DELIVERY_TABLE + LANE_HINTS_TABLE + """
+# Which process acknowledged each message, written in the transaction that
+# acknowledged it. A name is not a recipient (docs/architecture.md, "Stable
+# instance addresses"), so this is the fact that shows mail read by a different
+# instance than the one it was meant for: a job's notice is meant for the
+# process that dispatched it (`jobs.owner_pid`/`owner_key`, the notice names
+# the job). `conversation` is the Claude conversation the acking server was
+# started for: a correlation, not an identity. No row for an acked message
+# means an older revision acked it: unknown, never "the right one".
+# A table of its own, created on use inside the acking transaction, so a store
+# an older revision rebuilt gains it without a migration, and no `messages`
+# write ever names a column that store lacks.
+MESSAGE_ACKS_TABLE = """
+CREATE TABLE IF NOT EXISTS message_acks (
+    message_id   INTEGER PRIMARY KEY,
+    pid          INTEGER NOT NULL,
+    process_key  TEXT,
+    conversation TEXT
+);
+"""
+
+_SCHEMA = PUSH_DELIVERY_TABLE + LANE_HINTS_TABLE + MESSAGE_ACKS_TABLE + """
 CREATE TABLE IF NOT EXISTS messages (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     sender     TEXT NOT NULL,
@@ -420,6 +442,19 @@ def _lane_ackable(recipient: str, owned: LaneSpec) -> bool:
     return recipient in _lanes(owned)
 
 
+def _record_acks(
+    conn: sqlite3.Connection, ids: Iterable[int], conversation: Optional[str]
+) -> None:
+    """This process acked ``ids``, in the transaction ``conn`` holds open."""
+    conn.execute(MESSAGE_ACKS_TABLE)
+    pid, key = current_identity()
+    conn.executemany(
+        "INSERT OR REPLACE INTO message_acks (message_id, pid, process_key, conversation)"
+        " VALUES (?, ?, ?, ?)",
+        [(i, pid, key, conversation) for i in ids],
+    )
+
+
 def _row_to_dict(row: sqlite3.Row) -> dict:
     return {
         "message_id": row["id"],
@@ -464,6 +499,7 @@ def inbox(
     auto_ack: bool = True,
     after_id: int = 0,
     owned: LaneSpec | Callable[[sqlite3.Connection], LaneSpec] = None,
+    conversation: Optional[str] = None,
     db_path: Optional[Path] = None,
     now_fn: Callable[[], datetime] = _default_now,
 ) -> tuple[list[dict], int]:
@@ -503,6 +539,8 @@ def inbox(
     Consuming honours ownership exactly as ``ack`` does, so reading a
     lane you do not own shows you the messages but does NOT consume them.
     It is also ignored unless ``unread_only`` - see ``consuming`` below.
+    What it consumes is recorded as acked by this process, and by
+    ``conversation`` where the caller has one (``message_acks``).
 
     Nothing is destroyed: ``history`` ignores ``acked_at`` and remains the
     recovery path for anything consumed.
@@ -609,6 +647,7 @@ def inbox(
                         for msg in messages:
                             if msg["message_id"] in consumed:
                                 msg["acked_at"] = stamp
+                        _record_acks(conn, ackable, conversation)
 
             # Count only what THIS caller could actually consume. Counting
             # rows it can never ack (another session's lane) would leave
@@ -673,23 +712,50 @@ def senders(*, db_path: Optional[Path] = None) -> list[str]:
 
 def peek(message_id: int, *, db_path: Optional[Path] = None) -> Optional[dict]:
     """One message by id, or None. Lets a caller check who a message belongs
-    to before acting on it (see ``ack``'s lane guard)."""
+    to before acting on it (see ``ack``'s lane guard), and who acked it:
+    ``acked_by`` is None while unread, and for an ack an older revision made.
+
+    One query, so the ack and its acker are read from one snapshot."""
     db_path = _resolve_db(db_path)
     with closing(_connect(db_path)) as conn:
-        row = conn.execute(
-            "SELECT * FROM messages WHERE id = ?", (message_id,)
-        ).fetchone()
-        return _row_to_dict(row) if row else None
+        try:
+            row = conn.execute(
+                "SELECT m.*, a.pid AS by_pid, a.process_key AS by_key,"
+                " a.conversation AS by_conversation"
+                " FROM messages m LEFT JOIN message_acks a ON a.message_id = m.id"
+                " WHERE m.id = ?",
+                (message_id,),
+            ).fetchone()
+        except sqlite3.OperationalError as exc:
+            # A store an older revision rebuilt, where nothing has been acked
+            # by current code since. A read does not create the table.
+            if "no such table: message_acks" not in str(exc):
+                raise
+            row = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+        if row is None:
+            return None
+        acked = "by_pid" in row.keys() and row["by_pid"] is not None
+        return {
+            **_row_to_dict(row),
+            "acked_by": {
+                "pid": row["by_pid"],
+                "process_key": row["by_key"],
+                "conversation": row["by_conversation"],
+            }
+            if acked
+            else None,
+        }
 
 
 def ack(
     message_id: int,
     *,
     owned: LaneSpec | Callable[[sqlite3.Connection], LaneSpec] = None,
+    conversation: Optional[str] = None,
     db_path: Optional[Path] = None,
     now_fn: Callable[[], datetime] = _default_now,
 ) -> dict:
-    """Mark one message read. Returns ``{"ok": True}`` only if a still-unread
+    """Mark one message read, as acked by this process (see ``inbox``). Returns ``{"ok": True}`` only if a still-unread
     message with that id existed (idempotent: a second ack returns False).
 
     ``lane_suffix`` is this process's session lane, or empty when it has
@@ -722,6 +788,8 @@ def ack(
             )
             params = (_iso(now_fn()), message_id) + lane_params
             cur = conn.execute(sql, params)
+            if cur.rowcount:
+                _record_acks(conn, [message_id], conversation)
         return {"ok": cur.rowcount > 0}
 
 

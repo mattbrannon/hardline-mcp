@@ -2583,5 +2583,30 @@
     "tests": [
       "tests/test_server.py::test_server_info_reports_what_dispatch_would_run"
     ]
+  },
+  "a-consuming-read-records-who-acked": {
+    "file": "hardline_mcp/mailbox.py",
+    "before": "                        _record_acks(conn, ackable, conversation)\n",
+    "after": "",
+    "tests": [
+      "tests/test_mailbox.py::test_a_consuming_read_records_who_acked_exactly_what_it_consumed",
+      "tests/test_server.py::test_reads_and_acks_record_this_process_and_conversation"
+    ]
+  },
+  "only-an-ack-that-took-effect-is-recorded": {
+    "file": "hardline_mcp/mailbox.py",
+    "before": "            if cur.rowcount:\n                _record_acks(conn, [message_id], conversation)\n",
+    "after": "            _record_acks(conn, [message_id], conversation)\n",
+    "tests": [
+      "tests/test_mailbox.py::test_only_the_ack_that_took_effect_is_recorded"
+    ]
+  },
+  "acks-record-the-conversation": {
+    "file": "hardline_mcp/server.py",
+    "before": "            conversation=adapters.conversation_id(),\n",
+    "after": "            conversation=None,\n",
+    "tests": [
+      "tests/test_server.py::test_reads_and_acks_record_this_process_and_conversation"
+    ]
   }
 }
