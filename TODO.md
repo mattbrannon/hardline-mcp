@@ -6,9 +6,9 @@ below is known and deliberate.
 
 ## Open
 
-- **Verify async Codex jobs from Claude after an MCP reconnect** (#32): submit,
-  completion notice, and `job_result`, through a connected server rather than
-  the adapter alone.
+- **A cached process fails every registration after an older revision
+  rebuilds the store** (#67): columns added since a table first shipped are
+  applied only on a process's first initialization.
 
 ## Open design question
 
@@ -16,7 +16,8 @@ below is known and deliberate.
 absence made insufficient rather than replaced: a claim needs evidence. A
 2026-10-13 design pass deferred a separate instance address against stated
 criteria and recorded when to revisit; see "Stable instance addresses" under
-[Decisions](docs/architecture.md#decisions-and-what-was-rejected).
+[Decisions](docs/architecture.md#decisions-and-what-was-rejected). Acks are now
+recorded (`acked_by`), so its misdelivery trigger can be checked.
 
 ## Known limits, each a deliberate trade
 
@@ -47,3 +48,5 @@ so it is microseconds, but it is the writer lock.
 - Process-instance binding (#29): job owners carry `owner_key`, and a session
   whose launching host exited is dead, so an orphaned server no longer holds
   its lane.
+- Async Codex from Claude across an MCP reconnect, watched live (#32), and
+  `server_info().agent_commands` naming the executable a spawn runs (#33).
