@@ -257,19 +257,20 @@ _ADDED_COLUMNS = {
     "agent_sessions": {"host_pid": "INTEGER", "host_key": "TEXT"},
 }
 
-# How many of those columns the store has, in one schema-only read. Asked per
+# Names every one of those columns and reads no row: preparing it fails with
+# "no such column" or "no such table" on a store that lacks one. Asked per
 # connection because initialization is cached per process: a store deleted and
 # rebuilt by an older revision is populated, so the cache skips it, and every
 # write naming a column it lacks failed for the rest of the process (#67).
 # Columns, not a version number: revisions on different branches share
 # numbers, and what writes need is the columns.
-_ADDED_COLUMNS_PRESENT = "SELECT COUNT(*) FROM (" + " UNION ALL ".join(
-    f"SELECT 1 FROM pragma_table_info('{table}') WHERE name IN ("
-    + ", ".join(f"'{name}'" for name in columns)
-    + ")"
-    for table, columns in _ADDED_COLUMNS.items()
-) + ")"
-_ADDED_COLUMN_COUNT = sum(map(len, _ADDED_COLUMNS.values()))
+_ADDED_COLUMNS_PROBE = (
+    "SELECT "
+    + ", ".join(f"{table}.{name}" for table, columns in _ADDED_COLUMNS.items() for name in columns)
+    + " FROM "
+    + ", ".join(_ADDED_COLUMNS)
+    + " WHERE 0"
+)
 
 
 def _add_missing_columns(conn: sqlite3.Connection) -> None:
@@ -391,14 +392,18 @@ def _connect(db_path: Path) -> sqlite3.Connection:
         try:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA busy_timeout=10000")
-            if conn.execute(_ADDED_COLUMNS_PRESENT).fetchone()[0] == _ADDED_COLUMN_COUNT:
-                return conn
+            conn.execute(_ADDED_COLUMNS_PROBE)
+            return conn
+        except sqlite3.OperationalError as exc:
+            conn.close()
+            if "no such column" not in str(exc) and "no such table" not in str(exc):
+                raise
+            missing = exc
         except BaseException:
             conn.close()
             raise
-        conn.close()
         _initialized_paths.discard(str(db_path))
-    raise sqlite3.OperationalError(f"{db_path} still lacks columns of {_ADDED_COLUMNS}")
+    raise sqlite3.OperationalError(f"{db_path} still lacks a column it needs: {missing}")
 
 
 def _lanes(owned: LaneSpec) -> tuple[str, ...]:

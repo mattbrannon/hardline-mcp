@@ -2635,10 +2635,19 @@
   },
   "a-cached-process-checks-the-columns-it-writes": {
     "file": "hardline_mcp/mailbox.py",
-    "before": "            if conn.execute(_ADDED_COLUMNS_PRESENT).fetchone()[0] == _ADDED_COLUMN_COUNT:\n                return conn\n",
+    "before": "            conn.execute(_ADDED_COLUMNS_PROBE)\n            return conn\n",
     "after": "            return conn\n",
     "tests": [
-      "tests/test_identity.py::test_a_cached_process_survives_an_older_revisions_rebuild"
+      "tests/test_identity.py::test_a_cached_process_survives_an_older_revisions_rebuild",
+      "tests/test_identity.py::test_one_connection_restores_whatever_a_rebuild_left_out"
+    ]
+  },
+  "the-column-probe-names-every-added-column": {
+    "file": "hardline_mcp/mailbox.py",
+    "before": "    + \", \".join(f\"{table}.{name}\" for table, columns in _ADDED_COLUMNS.items() for name in columns)\n",
+    "after": "    + \", \".join(f\"{table}.{name}\" for table, columns in _ADDED_COLUMNS.items() for name in list(columns)[:1])\n",
+    "tests": [
+      "tests/test_identity.py::test_one_connection_restores_whatever_a_rebuild_left_out"
     ]
   }
 }
