@@ -107,7 +107,7 @@ until somebody asks. No heartbeat thread, no TTL, no reaper.
 
 **A pid is not an identity.** A pid is reused once its process exits, so every
 durable record pairs it with a creation-time token (`procid.process_key`) and
-compares before acting. Killing or trusting on a bare pid means killing or
+compares before acting. macOS cannot read one yet (see `TODO.md`). Killing or trusting on a bare pid means killing or
 trusting a stranger.
 
 **Absence is not evidence.** The registry cannot see every consumer — a process
@@ -167,8 +167,8 @@ ceremony. **A test that passes against a deliberately broken implementation is
 not coverage, and it reads exactly like a real pass.**
 
 The method: revert the fix to the original defect, and assert the test that
-claims to cover it FAILS. Roughly 75 such mutations were run across this
-feature. Several rounds each produced two or three tests that survived — every
+claims to cover it FAILS. The committed catalog holds over 300. In the
+first 75, several rounds each produced two or three tests that survived — every
 one of them a test that looked correct and proved nothing:
 
 - an assertion about *ordering* that the bug preserved
