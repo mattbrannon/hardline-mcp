@@ -210,8 +210,9 @@ Revisit when any of these holds:
 - contested names or the claim cap block real claims;
 - recorded provenance shows misdelivery (see "Who acked a message" below);
 - every writer that predates `agent_sessions` has been retired, the
-  precondition for any change of recipient format. `hardline-mcp report`
-  shows registered evidence only; retirement needs a controlled restart.
+  precondition for any change of recipient format. Held since 2026-10-13
+  (see "Retiring the legacy registry" below), so this decision is due for
+  review; `TODO.md` dates it.
 
 Review record (gpt-6-astra), adopted:
 - **"The instance address already exists" was rejected.** A reproducible,
@@ -220,6 +221,26 @@ Review record (gpt-6-astra), adopted:
   recipient identity away.
 - **Two proposed triggers were dropped.** "Codex exposes its thread id" has
   already happened, through `_meta`. A fork parent id proves only ancestry.
+
+**Retiring the legacy registry (2026-10-13).** Ownership read the pre-rename
+`sessions` table beside `agent_sessions` (`_legacy_holders`), so a process on
+older code that wrote only `sessions` was still seen as a holder. It no longer
+does, on this evidence rather than on an empty table, which absence alone
+would not prove:
+- the table had no rows;
+- every running hardline server (27, through an OS process listing, its
+  launchers' children included) started on 2026-09-24 or later;
+- the editable install runs whatever the working tree held at spawn, and every
+  tree HEAD pointed at from before the oldest of them until now (67, from the
+  complete reflog) creates `agent_sessions`. The same check with an earlier
+  cutoff does find a tree without it.
+
+Uncommitted edits are the one gap a reflog cannot see. A process that wrote
+only `sessions` would now go unseen, and its lane could be claimed and its mail
+split; old code cannot come back except through an old checkout. The table
+stays, as every table here does, and `hardline-mcp report` shows any writer it
+gains. Review (gpt-6-astra) held that a start date alone does not identify
+loaded code, which is why the tree each process spawned from was checked.
 
 **Who acked a message (2026-10-13).** The misdelivery trigger could not fire
 while nothing recorded who read what. Each acknowledgement on current code now

@@ -324,11 +324,6 @@ def _upsert(
 def _refusal(conn, lane: str, pid: int) -> dict | None:
     """One ownership rule; acquisition reserves the writer before evaluating it."""
     rows = list(conn.execute("SELECT * FROM agent_sessions WHERE lane = ?", (lane,)))
-    # The legacy table too. `holders` consults both, and `claim` asking
-    # a narrower question than the thing that reports the answer is how
-    # a lane reads as held everywhere except at the moment somebody
-    # takes it.
-    rows += _legacy_holders(conn, lane)
     existing = [_row_to_dict(r) for r in rows if r["pid"] != pid and _is_live(r)]
     if existing:
         held_by = ", ".join(
@@ -501,10 +496,7 @@ def granted(
     for lane in lanes:
         if _refusal(conn, lane, pid):
             continue
-        rows = list(
-            conn.execute("SELECT * FROM agent_sessions WHERE lane = ?", (lane,))
-        )
-        rows += _legacy_holders(conn, lane)
+        rows = conn.execute("SELECT * FROM agent_sessions WHERE lane = ?", (lane,))
         if any(
             r["pid"] == pid and r["process_key"] == key and _is_live(r) for r in rows
         ):
@@ -572,31 +564,8 @@ def holders(lane: str, *, db_path: Optional[Path] = None) -> list[dict]:
     """
     db_path = _resolve_db(db_path)
     with closing(_connect(db_path)) as conn:
-        rows = list(
-            conn.execute("SELECT * FROM agent_sessions WHERE lane = ?", (lane,))
-        )
-        rows += _legacy_holders(conn, lane)
+        rows = conn.execute("SELECT * FROM agent_sessions WHERE lane = ?", (lane,))
         return [_row_to_dict(r) for r in rows if _is_live(r)]
-
-
-def _legacy_holders(conn: sqlite3.Connection, lane: str) -> list:
-    """Rows for ``lane`` in the pre-rename `sessions` table, if it is there.
-
-    Renaming the table removed a migration that could destroy another
-    process's registrations, and bought a split-brain in exchange: a process on
-    older code writes `sessions` and reads only `sessions`, while this one uses
-    `agent_sessions`. Neither cohort could see the other, so each could hand
-    out a lane the other was holding - which is the failure the registry
-    exists to prevent, reintroduced by the fix for a different one.
-
-    Reading the old table for OWNERSHIP questions closes this half of it. The
-    other half cannot be closed from here: an older process will not consult
-    `agent_sessions` no matter what this one writes.
-    """
-    try:
-        return list(conn.execute("SELECT * FROM sessions WHERE lane = ?", (lane,)))
-    except sqlite3.Error:
-        return []  # no legacy table, which is the normal case after a while
 
 
 def claim(
