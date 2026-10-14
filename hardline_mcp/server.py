@@ -1538,6 +1538,7 @@ async def job_result(job_id: str) -> dict:
             "error": f"job is {job['state']}, not finished",
             "state": job["state"],
         }
+    hint = (job.get("request") or {}).get("model_hint")
     return {
         "ok": True,
         "job_id": job_id,
@@ -1546,6 +1547,7 @@ async def job_result(job_id: str) -> dict:
         "error": job.get("error"),
         "started_at": job.get("started_at"),
         "finished_at": job.get("finished_at"),
+        **({"model_hint": hint} if hint else {}),
     }
 
 
@@ -1613,6 +1615,42 @@ async def list_jobs(
     return {"jobs": rows, "count": len(rows), "counts_by_state": summary}
 
 
+def _hinted(agent: str, model: str | None, result: dict) -> dict:
+    """``result``, naming the tool that serves ``model`` if another one does."""
+    hint = adapters.model_hint(agent, model)
+    return {**result, "model_hint": hint} if hint else result
+
+
+def _list_models(mode: str, workdir: str | None) -> dict:
+    try:
+        codex = adapters.codex_models(mode, workdir)
+    except Exception as exc:  # noqa: BLE001 - one agent's lookup must not hide the other
+        codex = {"error": f"{type(exc).__name__}: {exc}"}
+    return {
+        "ok": True,
+        "claude": {"tool": "ask_claude", "aliases": list(adapters.CLAUDE_MODEL_ALIASES)},
+        "codex": {"tool": "ask_codex", **codex},
+    }
+
+
+@mcp.tool()
+async def list_models(mode: CodexMode = "default", workdir: str | None = None) -> dict:
+    """The model names ``ask_claude`` and ``ask_codex`` take, and which serves which.
+
+    Claude models (``fable``, ``opus``, ``sonnet``...) go to ``ask_claude``,
+    ChatGPT models (``astra``, ``sol``...) to ``ask_codex``. ``claude.aliases``
+    are Claude Code's documented aliases, since it cannot list models; a full
+    ID (``claude-fable-5-1``) passes through too, and either may still be
+    unavailable to the account or provider. ``codex`` is read live from
+    ``codex debug models`` as ``ask_codex`` with this ``mode`` and ``workdir``
+    would read it: ``families`` maps each family name to the model a call
+    naming it runs (null when none is uniquely newest), ``models`` lists every
+    selectable identifier, and a refused request or failed lookup reads
+    ``{"error": ...}`` beside the Claude half.
+    """
+    return await _in_thread(_list_models, mode, workdir)
+
+
 @mcp.tool()
 async def ask_hermes(prompt: str) -> dict:
     """Ask the Hermes agent (MrAnderson) a question and wait for its reply.
@@ -1636,6 +1674,11 @@ async def ask_codex(
     github_exclude: list[str] | None = None,
 ) -> dict:
     """Ask Codex a question and wait for its reply.
+
+    Runs the Codex CLI, normally for ChatGPT models (``astra``, ``sol``).
+    Claude models such as ``fable`` go through ``ask_claude``; a known Claude
+    name here comes back with a ``model_hint`` saying so, and ``list_models``
+    lists both.
 
     Spawns an ephemeral ``codex exec`` with no MCP servers or app connectors
     (the user's configured ones are disabled per call; Codex's built-in web
@@ -1682,7 +1725,7 @@ async def ask_codex(
     ``ok: false`` the same way, with ``commands_not_started``: its reply was
     written without reading anything. Some not starting is only counted.
     """
-    return await _in_thread(
+    result = await _in_thread(
         adapters.ask_codex,
         prompt,
         model=model,
@@ -1693,6 +1736,7 @@ async def ask_codex(
         github=github,
         github_exclude=github_exclude,
     )
+    return _hinted("codex", model, result)
 
 
 @mcp.tool()
@@ -2162,7 +2206,16 @@ def _result_lane(agent: str) -> str:
     return adapters.lane_for(agent)
 
 
-def _ask_async_impl(
+def _ask_async_impl(agent: str, ask_fn, prompt: str, from_agent: str, **options) -> dict:
+    """Admit an async job; whatever admission answers carries the model hint.
+
+    The job's terminal result does not need it: ``job_result`` reads it from
+    the request, which also covers a job lost or cancelled with no result."""
+    admitted = _admit_async(agent, ask_fn, prompt, from_agent, **options)
+    return _hinted(agent, options["model"], admitted)
+
+
+def _admit_async(
     agent: str,
     ask_fn,
     prompt: str,
@@ -2229,6 +2282,7 @@ def _ask_async_impl(
             "retryable": True,
             "max_pending": _ASYNC_MAX_PENDING,
         }
+    hint = adapters.model_hint(agent, model)  # the caller's spelling, before resolution
     resolution = None
     try:
         if agent == "codex" and adapters.is_codex_family(model):
@@ -2255,6 +2309,7 @@ def _ask_async_impl(
                 **_github_request(github, github_exclude, github_tools),
                 **({"routing": routing} if routing is not None else {}),
                 **({"model_resolution": resolution} if resolution else {}),
+                **({"model_hint": hint} if hint else {}),
             },
         )
     except BaseException:
@@ -2392,7 +2447,9 @@ async def ask_codex_async(
     ``mode`` mirrors ``ask_codex`` — background review is exactly where
     advisory isolation is wanted, and omitting it here was a parity gap.
     A family name in ``model`` (``"astra"``) is resolved once, at admission, so
-    the receipt's ``model_resolution`` names the model that will run.
+    the receipt's ``model_resolution`` names the model that will run. Claude
+    models go through ``ask_claude_async``; a ``model_hint`` for a Claude name
+    is on the receipt or refusal, and on ``job_status`` and ``job_result``.
     ``github``/``github_exclude`` as for ``ask_codex``; the evidence is
     collected when the job runs, and ``job_cancel`` reaches that collection.
     """
@@ -2434,7 +2491,11 @@ async def ask_claude(
     and response shape — omitting ``model`` passes no ``--model`` flag, so
     Claude Code's own configured default applies — plus (parity with Codex)
     Edit/Write/NotebookEdit are denied by default — inspection tools like
-    Read/Grep/Bash still work. ``model`` pins a Claude alias/full model ID.
+    Read/Grep/Bash still work. ``model`` pins a Claude model: an alias
+    (``fable``, ``opus``, ``sonnet``, ``haiku``) or a full ID, passed through
+    and judged by Claude Code. ChatGPT models (``astra``, ``sol``) go through
+    ``ask_codex``; a Codex-shaped name here comes back with a ``model_hint``,
+    and ``list_models`` lists both.
     ``effort`` is one of ``default|low|medium|high|xhigh|max``; ``default``
     omits the flag. ``workdir`` targets a repository in default mode and is
     rejected in advisory mode. ``write=True`` opts into full tool access plus
@@ -2491,12 +2552,14 @@ async def ask_claude(
         github_tools=github_tools,
     )
     if not plan["ok"]:
-        return {"ok": False, "error": plan["error"], "routing": plan["routing"]}
+        return _hinted(
+            "claude", model, {"ok": False, "error": plan["error"], "routing": plan["routing"]}
+        )
     result = await _in_thread(plan["ask_fn"], prompt, **plan["ask_kwargs"])
     result = dict(result)
     if plan["routing"] is not None and "routing" not in result:
         result["routing"] = plan["routing"]
-    return result
+    return _hinted("claude", model, result)
 
 
 @mcp.tool()
@@ -2528,6 +2591,9 @@ async def ask_claude_async(
     ``mode`` mirrors ``ask_claude`` — background review is exactly where
     advisory isolation is wanted, and omitting it here was a parity gap.
     ``github``/``github_exclude``/``github_tools`` as for ``ask_claude``.
+    ``model`` as for ``ask_claude``: ChatGPT models go through
+    ``ask_codex_async``, and a ``model_hint`` for a Codex-shaped name is on the
+    receipt or refusal, and on ``job_status`` and ``job_result``.
     """
     plan = await _in_thread(
         _plan_claude_dispatch,
@@ -2544,13 +2610,13 @@ async def ask_claude_async(
         github_tools=github_tools,
     )
     if not plan["ok"]:
-        return {
+        return _hinted("claude", model, {
             "ok": False,
             "accepted": False,
             "dispatched": False,
             "error": plan["error"],
             "routing": plan["routing"],
-        }
+        })
     ask_kwargs = plan["ask_kwargs"]
     return await _in_thread(
         _ask_async_impl,

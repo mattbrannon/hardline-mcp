@@ -187,6 +187,7 @@ The client's MCP tool schema supplies arguments and defaults.
 | `server_info` | Inspect the running server and watcher command. |
 | `ask_hermes`, `ask_codex`, `ask_claude` | Start an agent CLI and wait for its answer. |
 | `ask_codex_async`, `ask_claude_async` | Submit a background job. |
+| `list_models` | See which tool serves which model: Claude's to `ask_claude`, ChatGPT's to `ask_codex`. |
 | `github_snapshot` | Collect a pull request once, for reviewers to share. |
 | `job_status`, `job_result` | Track a job and retrieve its answer. |
 | `job_cancel` | Cancel a job. |

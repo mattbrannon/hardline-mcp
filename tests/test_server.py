@@ -412,6 +412,7 @@ async def test_tool_roster_is_exactly_this():
         "ask_codex_async",
         "ask_claude",
         "ask_claude_async",
+        "list_models",
         "github_snapshot",
     }
 
