@@ -309,6 +309,41 @@ lane's holders at send time:
   (#67). Acks go in a table created on use inside the acking transaction.
 - **Not adopted: an explicit job-id column.** The notice body carries the job id.
 
+**A model name says which tool serves it (2026-10-13).** A Codex session told
+to ask Fable called `ask_codex(model="fable")`, got Codex's rejection, and
+concluded Fable was unavailable: nothing it could read said Fable is a Claude
+model. Now the tool descriptions name each side's models, `list_models` lists
+them, and a name sent to the other agent's tool comes back with a
+`model_hint` (see [models](configuration.md#models-effort-and-results)). The
+call still goes where it was sent; a hint never refuses or substitutes.
+
+Review record (gpt-6-astra), on a first design that hinted on failure only,
+checked Codex's catalog to recognise a Codex name on `ask_claude`, and put
+the catalog in `server_info`:
+- **A failure is not a diagnosis.** A demoted answer, a timeout or a
+  cancellation also reads `ok: false`, so the hint states what the name is,
+  conditionally ("if you meant Claude"), and is attached whatever the answer.
+  That also puts it on the async receipt, where a fast failure's hint would
+  otherwise be lost.
+- **A second review found async paths that dropped it** (an admission
+  refusal, could-not-start, a cancellation before start), and `list_models`
+  naming a family's newest model where dispatch runs a listed identifier as
+  itself. Admission's every answer now carries it, `job_result` reads it from
+  the job's request, and both lists use dispatch's rule (`adapters._runs_as`).
+- **No process for a hint.** A catalog lookup after a failed Claude call would
+  run outside the job's child tracking, extend the Claude dispatch lock under
+  quota routing, read a different context than the call, and could replace the
+  real failure with its own exception. The hint reads the name's shape alone,
+  so a Codex model the shape cannot recognise gets no hint rather than a
+  probe.
+- **`server_info` starts no process.** Its executable report is tested to
+  spawn nothing, and watcher setup waits on it; live discovery is its own
+  tool.
+- **Recognised, not available.** Claude Code has no command that lists
+  models, so its documented aliases recognise names. Provider IDs of other
+  shapes (Bedrock ARNs, prefixed IDs) get no hint either way; a letters-only
+  deployment name sent to `ask_claude` gets the conditional one.
+
 ## Why read controls are explicit
 
 Earlier Codex calls inherited the host sandbox unless an option selected one.

@@ -1949,6 +1949,12 @@ _CODEX_FAMILY_SLUG = re.compile(r"([a-z]+)-(\d+(?:\.\d+)*)-([a-z]+)")
 # Codex answers from its own cache in ~0.05s, or refreshes in ~0.35s (both
 # measured); the bound is for a refresh that hangs.
 _CODEX_CATALOG_TIMEOUT_S = 60
+# Claude Code's model aliases, as its model-config page documents them.
+# Claude Code has no command that lists models, so these recognise names; they
+# do not prove a model is available to the account.
+CLAUDE_MODEL_ALIASES = (
+    "fable", "best", "opus", "sonnet", "haiku", "opus[1m]", "sonnet[1m]", "opusplan",
+)
 
 
 def _strip_codex_api_overrides(env: dict[str, str]) -> None:
@@ -2042,6 +2048,11 @@ def _codex_catalog(mode: str, workdir: str | None) -> tuple[list | None, str | N
     return [m for m in models if isinstance(m, dict) and isinstance(m.get("slug"), str)], None
 
 
+def _selectable(model: dict) -> bool:
+    """Listed (not hidden, and not an unknown visibility) and not retiring."""
+    return model.get("visibility") == "list" and model.get("upgrade") is None
+
+
 def _family_member(model: dict) -> tuple[str, tuple[int, ...], str] | None:
     """``(prefix, generation, family)`` of a selectable model, else None.
 
@@ -2052,7 +2063,7 @@ def _family_member(model: dict) -> tuple[str, tuple[int, ...], str] | None:
     outranking the other.
     """
     match = _CODEX_FAMILY_SLUG.fullmatch(model["slug"])
-    if not match or model.get("visibility") != "list" or model.get("upgrade") is not None:
+    if not match or not _selectable(model):
         return None
     parts = [int(part) for part in match.group(2).split(".")]
     while len(parts) > 1 and parts[-1] == 0:
@@ -2106,9 +2117,9 @@ def resolve_codex_model(
     models, reason = _codex_catalog(mode, workdir)
     considered = []
     if models is not None:
-        if any(m["slug"] == model for m in models):
+        slug, reason, considered = _runs_as(model, models)
+        if slug == model:
             return model, None
-        slug, reason, considered = _select_codex_family(model.lower(), models)
         if slug is not None:
             return slug, {
                 "requested": model,
@@ -2123,6 +2134,75 @@ def resolve_codex_model(
         "considered": considered,
         "source": "codex debug models",
     }
+
+
+def _runs_as(name: str, models: list) -> tuple[str | None, str | None, list]:
+    """What a letters-only ``name`` runs as under ``models``.
+
+    ``(slug, reason, considered)``: the name itself when the catalog lists it
+    as an identifier, else its family's single newest member, else None and
+    why. One rule for dispatch and ``codex_models``, so the list never names a
+    model a call would not run.
+    """
+    if any(m["slug"] == name for m in models):
+        return name, None, []
+    return _select_codex_family(name.lower(), models)
+
+
+def codex_models(mode: str = "default", workdir: str | None = None) -> dict:
+    """What ``ask_codex`` would accept, read from the catalog it would read.
+
+    ``families`` maps each family name to the model a call naming it runs, or
+    None when none is uniquely newest (passed to Codex literally); ``models``
+    lists every selectable identifier, variants included. A request
+    ``ask_codex`` would refuse, or a catalog that will not read, is
+    ``{"error": ...}``.
+    """
+    error, workdir = validate_request(
+        "codex", model=None, effort="default", mode=mode, workdir=workdir, write=False
+    )
+    if error is not None:
+        return {"error": error["error"]}
+    models, reason = _codex_catalog(mode, workdir)
+    if models is None:
+        return {"error": reason}
+    listed = [m for m in models if _selectable(m)]
+    families = {parsed[2] for m in listed if (parsed := _family_member(m))}
+    return {
+        "families": {f: _runs_as(f, models)[0] for f in sorted(families)},
+        "models": sorted(m["slug"] for m in listed),
+        "source": "codex debug models",
+    }
+
+
+def model_hint(agent: str, model: str | None) -> str | None:
+    """Which tool a model name points at, when it is not the one called.
+
+    From the name alone, starting no process, and advice only: the call still
+    goes where it was sent, because a custom Codex provider may serve a
+    ``claude-`` model and a Claude provider may deploy under any name. A Codex
+    session told to ask Fable called ``ask_codex(model="fable")``, and read the
+    rejection as Fable being unavailable.
+    """
+    if model is None:
+        return None
+    name = model.lower()
+    claude_name = name in CLAUDE_MODEL_ALIASES or name.startswith("claude-")
+    if agent == "codex" and claude_name:
+        return (
+            f"{model!r} is a Claude model name. If you meant Claude, use "
+            f"ask_claude or ask_claude_async with model={model!r}."
+        )
+    # "default" is Claude Code's reset to the account default: letters-only
+    # like a Codex family, but Claude's own.
+    if agent == "claude" and not claude_name and name != "default" and (
+        _CODEX_FAMILY.fullmatch(model) or _CODEX_FAMILY_SLUG.fullmatch(model)
+    ):
+        return (
+            f"{model!r} is not a Claude Code model alias. If you meant a Codex "
+            f"(ChatGPT) model, use ask_codex or ask_codex_async with model={model!r}."
+        )
+    return None
 
 
 def ask(agent: str, text: str) -> dict:

@@ -2873,5 +2873,137 @@
     "tests": [
       "tests/test_server.py::test_an_unpaid_result_keeps_its_admission_slot"
     ]
+  },
+  "hint-knows-full-claude-ids": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "claude_name = name in CLAUDE_MODEL_ALIASES or name.startswith(\"claude-\")",
+    "after": "claude_name = name in CLAUDE_MODEL_ALIASES",
+    "tests": [
+      "tests/test_model_routing.py::test_a_claude_name_sent_to_codex_points_at_ask_claude[claude-fable-5-1]"
+    ]
+  },
+  "hint-default-is-claudes": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "and not claude_name and name != \"default\" and (",
+    "after": "and not claude_name and (",
+    "tests": [
+      "tests/test_model_routing.py::test_no_hint_where_the_name_gives_no_evidence[claude-default]"
+    ]
+  },
+  "hint-knows-codex-identifiers": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "_CODEX_FAMILY.fullmatch(model) or _CODEX_FAMILY_SLUG.fullmatch(model)\n",
+    "after": "_CODEX_FAMILY.fullmatch(model)\n",
+    "tests": [
+      "tests/test_model_routing.py::test_a_codex_name_sent_to_claude_points_at_ask_codex[gpt-6-astra]"
+    ]
+  },
+  "hint-on-sync-codex": {
+    "file": "hardline_mcp/server.py",
+    "before": "    return _hinted(\"codex\", model, result)\n",
+    "after": "    return result\n",
+    "tests": [
+      "tests/test_model_routing.py::test_a_sync_call_carries_the_hint_whatever_the_outcome[asyncio-codex-fable-ask_claude-answered]",
+      "tests/test_model_routing.py::test_a_sync_call_carries_the_hint_whatever_the_outcome[asyncio-codex-fable-ask_claude-rejected]"
+    ]
+  },
+  "hint-on-sync-claude": {
+    "file": "hardline_mcp/server.py",
+    "before": "    return _hinted(\"claude\", model, result)\n",
+    "after": "    return result\n",
+    "tests": [
+      "tests/test_model_routing.py::test_a_sync_call_carries_the_hint_whatever_the_outcome[asyncio-claude-astra-ask_codex-answered]",
+      "tests/test_model_routing.py::test_a_sync_call_carries_the_hint_whatever_the_outcome[asyncio-claude-astra-ask_codex-rejected]"
+    ]
+  },
+  "hint-on-claude-routing-refusal": {
+    "file": "hardline_mcp/server.py",
+    "before": "        return _hinted(\n            \"claude\", model, {\"ok\": False, \"error\": plan[\"error\"], \"routing\": plan[\"routing\"]}\n        )\n",
+    "after": "        return {\"ok\": False, \"error\": plan[\"error\"], \"routing\": plan[\"routing\"]}\n",
+    "tests": [
+      "tests/test_model_routing.py::test_a_refusal_carries_the_hint[asyncio-codex-fable-ask_claude]"
+    ]
+  },
+  "hint-on-every-async-admission": {
+    "file": "hardline_mcp/server.py",
+    "before": "    return _hinted(agent, options[\"model\"], admitted)\n",
+    "after": "    return admitted\n",
+    "tests": [
+      "tests/test_model_routing.py::test_an_async_job_carries_the_hint_wherever_it_is_read[asyncio-codex-fable-ask_claude]",
+      "tests/test_model_routing.py::test_a_refusal_carries_the_hint[asyncio-claude-astra-ask_codex]"
+    ]
+  },
+  "hint-on-async-request": {
+    "file": "hardline_mcp/server.py",
+    "before": "                **({\"model_hint\": hint} if hint else {}),\n",
+    "after": "",
+    "tests": [
+      "tests/test_model_routing.py::test_an_async_job_carries_the_hint_wherever_it_is_read[asyncio-codex-fable-ask_claude]",
+      "tests/test_model_routing.py::test_an_async_job_carries_the_hint_wherever_it_is_read[asyncio-claude-astra-ask_codex]"
+    ]
+  },
+  "hint-on-async-request-is-the-callers-spelling": {
+    "file": "hardline_mcp/server.py",
+    "before": "                **({\"model_hint\": hint} if hint else {}),\n",
+    "after": "                **({\"model_hint\": h} if (h := adapters.model_hint(agent, model)) else {}),\n",
+    "tests": [
+      "tests/test_model_routing.py::test_the_hint_reads_the_callers_spelling_not_the_expansion"
+    ]
+  },
+  "job-result-reads-the-hint-from-the-request": {
+    "file": "hardline_mcp/server.py",
+    "before": "        **({\"model_hint\": hint} if hint else {}),\n    }\n",
+    "after": "    }\n",
+    "tests": [
+      "tests/test_model_routing.py::test_an_async_job_carries_the_hint_wherever_it_is_read[asyncio-codex-fable-ask_claude]"
+    ]
+  },
+  "list-models-shows-unresolvable-families": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "\"families\": {f: _runs_as(f, models)[0] for f in sorted(families)},",
+    "after": "\"families\": {f: s for f in sorted(families) if (s := _runs_as(f, models)[0])},",
+    "tests": [
+      "tests/test_model_routing.py::test_list_models_names_each_tool_and_what_it_takes"
+    ]
+  },
+  "list-models-follows-dispatchs-rule": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "\"families\": {f: _runs_as(f, models)[0] for f in sorted(families)},",
+    "after": "\"families\": {f: _select_codex_family(f, models)[0] for f in sorted(families)},",
+    "tests": [
+      "tests/test_model_routing.py::test_a_family_name_listed_as_a_model_runs_as_itself"
+    ]
+  },
+  "list-models-lists-variants": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "\"models\": sorted(m[\"slug\"] for m in listed),",
+    "after": "\"models\": sorted(m[\"slug\"] for m in listed if _family_member(m)),",
+    "tests": [
+      "tests/test_model_routing.py::test_list_models_names_each_tool_and_what_it_takes"
+    ]
+  },
+  "list-models-skips-hidden": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "    return model.get(\"visibility\") == \"list\" and model.get(\"upgrade\") is None\n",
+    "after": "    return model.get(\"upgrade\") is None\n",
+    "tests": [
+      "tests/test_model_routing.py::test_list_models_names_each_tool_and_what_it_takes"
+    ]
+  },
+  "list-models-reads-its-workdir": {
+    "file": "hardline_mcp/server.py",
+    "before": "        codex = adapters.codex_models(mode, workdir)\n",
+    "after": "        codex = adapters.codex_models(mode, None)\n",
+    "tests": [
+      "tests/test_model_routing.py::test_list_models_reads_the_catalog_its_options_name"
+    ]
+  },
+  "list-models-reads-its-mode": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "    models, reason = _codex_catalog(mode, workdir)\n    if models is None:\n        return {\"error\": reason}\n",
+    "after": "    models, reason = _codex_catalog(\"default\", workdir)\n    if models is None:\n        return {\"error\": reason}\n",
+    "tests": [
+      "tests/test_model_routing.py::test_list_models_reads_the_catalog_its_options_name"
+    ]
   }
 }

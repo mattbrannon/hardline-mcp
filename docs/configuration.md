@@ -274,8 +274,29 @@ reported `ok: false` rather than returning whatever it printed. `ask_hermes`
 accepts only `prompt` and uses Hermes's own defaults.
 
 Omitting `model` passes no model flag. Hardline passes identifiers through
-unchanged; use an identifier supported by the selected CLI. Claude Code accepts
-its own aliases, such as `opus`.
+unchanged; use an identifier supported by the selected CLI. Claude models
+(`fable`, `opus`, `sonnet`, `claude-fable-5-1`) go to `ask_claude`, and
+ChatGPT models (`astra`, `sol`, `gpt-6-astra`) to `ask_codex`.
+
+`list_models()` says which tool takes which names. Under `claude` are Claude
+Code's documented aliases, since it has no command that lists models; full
+IDs pass through as well. Under `codex` is Codex's live catalog, read as
+`ask_codex` would read it with the same `mode` and `workdir`: `families` maps
+each family name to the model a call naming it runs (itself when the catalog
+lists the name as an identifier; `null` when none is uniquely newest), and
+`models` lists every selectable identifier. A request `ask_codex` would refuse,
+or a lookup that fails, reads `{"error": ...}` without hiding the Claude half.
+Neither half proves a model is available to the account.
+
+A name sent to the other agent's tool still goes where it was sent, since a
+custom Codex provider may serve a `claude-` model and a Claude provider may
+deploy under any name. The answer carries a `model_hint` naming the right
+tool: for a Claude alias or `claude-` ID sent to `ask_codex`, or a
+letters-only or `<prefix>-<generation>-<family>` name that is not a Claude
+alias sent to `ask_claude`. The hint comes from the name alone, starts no
+process, and is attached whatever the answer. On async calls it is on the
+receipt or refusal, and on `job_status` and `job_result`, both read from the
+job's request, so a job lost or cancelled without a result shows it too.
 
 For Codex, a letters-only family name such as `astra` or `sol` resolves to the
 newest current model in that family, read from `codex debug models` on the
@@ -284,7 +305,7 @@ selected executable: `astra` becomes `gpt-6-astra`, and `sol` becomes
 `<prefix>-<generation>-<family>` qualify, so variants such as `-mini` and dated
 snapshots never stand in for the family. Hidden and retiring models (any
 `upgrade`) are skipped, and generations compare numerically. Advisory calls read
-the catalog from the same isolated home they run in.
+the catalog from an isolated home prepared the same way as the one they run in.
 
 A name the catalog lists as an identifier is used as is. A family that cannot
 be resolved (an unavailable catalog, no match, or a tie) is passed to Codex
