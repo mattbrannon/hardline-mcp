@@ -1909,6 +1909,108 @@ def test_a_refused_lane_keeps_its_place_without_being_granted(holder):
     raw.close()
     assert seqs == {"codex:derived": 1, "codex:taken": 2, "codex:role": 3}
     assert len(sessions.holders("codex:taken", db_path=holder)) == 2, "nothing was taken over"
+    raw = sqlite3.connect(holder)
+    foreign = raw.execute(
+        "SELECT seq FROM agent_sessions WHERE lane = 'codex:taken' AND pid != ?", (pid,)
+    ).fetchall()
+    raw.close()
+    assert foreign == [(1,)], "the holder's own row is not re-ranked"
+
+
+def _seqs(db, pid):
+    raw = sqlite3.connect(db)
+    rows = dict(raw.execute("SELECT lane || '/' || IFNULL(process_key, '-'), seq FROM agent_sessions WHERE pid = ?", (pid,)))
+    raw.close()
+    return rows
+
+
+def _own_row(db, pid, lane, key, seq):
+    raw = sqlite3.connect(db)
+    with raw:
+        raw.execute(
+            "INSERT INTO agent_sessions (pid, lane, agent, process_key, started_at,"
+            " last_seen, claimed_at, seq) VALUES (?, ?, 'codex', ?, 't', 't', 't', ?)",
+            (pid, lane, key, seq),
+        )
+    raw.close()
+
+
+def test_a_refused_lane_reranks_only_rows_with_this_creation_token(holder):
+    """With every lane refused nothing clears a reused pid's rows first, so the
+    re-rank itself must match the token: a stranger's row on this pid stays."""
+    pid, key = procid.current_identity()
+    _own_row(holder, pid, "codex:taken", "a-previous-process", 7)
+    got = sessions.register(agent="codex", lanes=["codex:taken"], db_path=holder, ranked=True)
+    assert got["contested"] == ["codex:taken"] and got["lanes"] == []
+    assert _seqs(holder, pid) == {"codex:taken/a-previous-process": 7}
+
+
+def test_a_process_without_a_token_reranks_its_own_rows(holder, monkeypatch):
+    pid = os.getpid()
+    monkeypatch.setattr(sessions, "current_identity", lambda: (pid, None))
+    _own_row(holder, pid, "codex:taken", None, 9)
+    sessions.register(
+        agent="codex", lanes=["codex:derived", "codex:taken"], db_path=holder, ranked=True
+    )
+    assert _seqs(holder, pid) == {"codex:derived/-": 1, "codex:taken/-": 2}
+
+
+def test_a_refused_lane_with_no_row_here_gets_none(holder):
+    pid, _ = procid.current_identity()
+    sessions.register(
+        agent="codex", lanes=["codex:derived", "codex:taken"], db_path=holder, ranked=True
+    )
+    assert set(_seqs(holder, pid)) == {f"codex:derived/{procid.current_identity()[1]}"}
+
+
+def test_a_refused_ranked_claim_changes_no_rank(holder):
+    pid, key = procid.current_identity()
+    _own_row(holder, pid, "codex:derived", key, 5)
+    _own_row(holder, pid, "codex:role", key, 3)
+    got = sessions.claim(
+        agent="codex", label="taken", lanes=["codex:derived", "codex:role"],
+        db_path=holder, ranked=True,
+    )
+    assert got["ok"] is False
+    assert _seqs(holder, pid) == {f"codex:derived/{key}": 5, f"codex:role/{key}": 3}
+
+
+@pytest.mark.anyio
+async def test_claiming_the_derived_name_makes_it_the_advertised_one(codex_session, monkeypatch):
+    """It was held first, so it ranked first while the process answered to it."""
+    from hardline_mcp import server
+
+    monkeypatch.setenv("HARDLINE_AGENT_LABEL", "pinned")
+    assert (await server.register_session(label="a"))["ok"] is True
+    assert (await server.register_session(label="pinned"))["ok"] is True
+    server._announce_self("codex")
+    assert adapters.lane_suffix() == "pinned"
+    assert sessions.live(db_path=codex_session)[0]["lane"] == "codex:pinned"
+
+
+@pytest.mark.anyio
+async def test_the_claim_itself_writes_the_order_it_leaves(codex_session, monkeypatch):
+    """Not left for the next heartbeat to repair: that one may never write."""
+    from hardline_mcp import server
+
+    monkeypatch.setenv("HARDLINE_AGENT_LABEL", "pinned")
+    monkeypatch.setattr(server, "_announce_self", lambda *a, **k: None)
+    assert (await server.register_session(label="a"))["ok"] is True
+    assert (await server.register_session(label="pinned"))["ok"] is True
+    assert sessions.live(db_path=codex_session)[0]["lane"] == "codex:pinned"
+
+
+@pytest.mark.anyio
+async def test_reclaiming_a_held_name_does_not_promote_it(codex_session, monkeypatch):
+    """Today's contract, pinned: A, B, A answers to B, here and in the registry
+    the claim itself writes."""
+    from hardline_mcp import server
+
+    monkeypatch.setattr(server, "_announce_self", lambda *a, **k: None)
+    for label in ("a", "b", "a"):
+        assert (await server.register_session(label=label))["ok"] is True
+    assert adapters.lane_suffix() == "b"
+    assert sessions.live(db_path=codex_session)[0]["lane"] == "codex:b"
 
 
 @pytest.mark.anyio
