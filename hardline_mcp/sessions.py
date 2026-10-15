@@ -268,7 +268,7 @@ def drop_lane(
 
 
 def _upsert(
-    conn, *, pid, lane, agent, label, key, cwd, stamp, host_pid, host_key
+    conn, *, pid, lane, agent, label, key, cwd, stamp, host_pid, host_key, seq=None
 ) -> None:
     """Write one (process, lane) row, creating it only if not already there.
 
@@ -289,12 +289,13 @@ def _upsert(
     # from every previous lane - and if the new claim was then rolled back, from
     # the one the session was still answering to, leaving list_agents
     # advertising it with no label at all.
+    # ``seq`` likewise: None keeps a row's place, a rank rewrites it.
     cur = conn.execute(
         "UPDATE agent_sessions SET agent = ?, label = COALESCE(?, label),"
         " process_key = ?, cwd = ?, last_seen = ?, host_pid = COALESCE(?, host_pid),"
-        " host_key = CASE WHEN ? IS NULL THEN host_key ELSE ? END"
+        " host_key = CASE WHEN ? IS NULL THEN host_key ELSE ? END, seq = COALESCE(?, seq)"
         " WHERE pid = ? AND lane = ?",
-        (agent, label, key, cwd, stamp, host_pid, host_pid, host_key, pid, lane),
+        (agent, label, key, cwd, stamp, host_pid, host_pid, host_key, seq, pid, lane),
     )
     if cur.rowcount == 0:
         # `seq`, not the timestamp, is what orders a session's names. Stored
@@ -306,7 +307,7 @@ def _upsert(
             "INSERT INTO agent_sessions (pid, lane, agent, label, process_key, cwd,"
             " started_at, last_seen, claimed_at, host_pid, host_key, seq)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
-            " (SELECT COALESCE(MAX(seq), 0) + 1 FROM agent_sessions WHERE pid = ?))",
+            " COALESCE(?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM agent_sessions WHERE pid = ?)))",
             (
                 pid,
                 lane,
@@ -319,6 +320,7 @@ def _upsert(
                 stamp,
                 host_pid,
                 host_key,
+                seq,
                 pid,
             ),
         )
@@ -389,9 +391,16 @@ def _acquire(
     atomic: bool,
     host_pid,
     host_key,
+    ranked: bool = False,
 ) -> dict:
     pid = os.getpid() if pid is None else pid
     requested = tuple(dict.fromkeys(lanes))
+    # ``ranked``: ``lanes`` is everything this process holds, oldest first, so
+    # each row's ``seq`` is written from its place in it. Otherwise a row keeps
+    # its seq and a new one goes last - which put a derived lane granted after a
+    # claim (refused at startup, regained later) above that claim, advertising
+    # the derived name while the process answers to the claim.
+    rank = {lane: i for i, lane in enumerate(requested, 1)} if ranked else {}
     if host_pid is not None and instance_state(host_pid, host_key) == DEAD:
         return {
             "ok": False,
@@ -426,6 +435,14 @@ def _acquire(
                         conn.rollback()
                         return refusal
                     refused.append(lane)
+                    if lane in rank:
+                        # Its place is kept in order, never granted: only a row
+                        # this very process already has is touched.
+                        conn.execute(
+                            "UPDATE agent_sessions SET seq = ?"
+                            " WHERE pid = ? AND lane = ? AND process_key IS ?",
+                            (rank[lane], pid, lane, key),
+                        )
                     continue
                 if not accepted and key is not None:
                     conn.execute(
@@ -449,6 +466,7 @@ def _acquire(
                     stamp=stamp,
                     host_pid=host_pid,
                     host_key=host_key,
+                    seq=rank.get(lane),
                 )
                 accepted.append(lane)
     return {
@@ -477,11 +495,14 @@ def register(
     host_key: Optional[str] = None,
     db_path: Optional[Path] = None,
     now_fn: Callable[[], datetime] = _default_now,
+    ranked: bool = False,
 ) -> dict:
     """Acquire or refresh each requested lane; report contested ones separately.
 
     Ownership checks and writes share one transaction with explicit claims.
     Refreshes are additive: a stale announcement cannot remove a newer claim.
+    ``ranked``: the lanes are everything this process holds, oldest first, and
+    the registry's order of its names is rewritten to match.
     """
     requested = list(lanes or ()) + ([lane] if lane else [])
     return _acquire(
@@ -496,6 +517,7 @@ def register(
         host_pid=host_pid,
         host_key=host_key,
         atomic=False,
+        ranked=ranked,
     )
 
 
@@ -598,11 +620,13 @@ def claim(
     host_key: Optional[str] = None,
     db_path: Optional[Path] = None,
     now_fn: Callable[[], datetime] = _default_now,
+    ranked: bool = False,
 ) -> dict:
     """Acquire the named role and retained lanes together, or change nothing.
 
     A successful claimant inherits unread mail already addressed to the role.
     Live or unprobeable holders and outstanding work prevent a takeover.
+    ``ranked`` as for ``register``, with the role last unless already held.
     """
     lane = f"{agent}:{label}"
     return _acquire(
@@ -617,6 +641,7 @@ def claim(
         host_pid=host_pid,
         host_key=host_key,
         atomic=True,
+        ranked=ranked,
     )
 
 

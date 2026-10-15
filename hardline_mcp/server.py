@@ -521,6 +521,7 @@ def _announce_locked(agent: str, lane: str) -> str | None:
         registration = sessions.register(
             agent=agent,
             lanes=adapters.owned_recipients(agent),
+            ranked=True,
             **adapters.host_identity(),
         )
         if registration.get("contested"):
@@ -697,7 +698,8 @@ def _register_locked(label: str, agent: str | None, wait: bool) -> dict:
     claimed = sessions.claim(
         agent=agent,
         label=label,
-        lanes=adapters.owned_recipients(agent),
+        lanes=adapters.recipients_before_claim(agent, label),
+        ranked=True,
         **adapters.host_identity(),
     )
     if not claimed.get("ok"):

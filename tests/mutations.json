@@ -1,4 +1,102 @@
 {
+  "registry-ranks-from-the-held-order": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "    rank = {lane: i for i, lane in enumerate(requested, 1)} if ranked else {}",
+    "after": "    rank = {}",
+    "tests": [
+      "tests/test_sessions.py::test_a_derived_lane_granted_after_a_claim_is_not_advertised_over_it",
+      "tests/test_sessions.py::test_a_refused_lane_keeps_its_place_without_being_granted"
+    ]
+  },
+  "registry-rank-rewrites-an-existing-row": {
+    "file": "hardline_mcp/sessions.py",
+    "before": " seq = COALESCE(?, seq)\"",
+    "after": " seq = COALESCE(NULL + ?, seq)\"",
+    "tests": [
+      "tests/test_sessions.py::test_a_derived_lane_granted_after_a_claim_is_not_advertised_over_it"
+    ]
+  },
+  "registry-rank-on-insert": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "            \" COALESCE(?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM agent_sessions WHERE pid = ?)))\",",
+    "after": "            \" COALESCE(NULL + ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM agent_sessions WHERE pid = ?)))\",",
+    "tests": [
+      "tests/test_sessions.py::test_a_derived_lane_granted_after_a_claim_is_not_advertised_over_it",
+      "tests/test_sessions.py::test_a_refused_lane_keeps_its_place_without_being_granted"
+    ]
+  },
+  "registry-refused-lane-keeps-its-place": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                    if lane in rank:\n",
+    "after": "                    if False:\n",
+    "tests": [
+      "tests/test_sessions.py::test_a_refused_lane_keeps_its_place_without_being_granted"
+    ]
+  },
+  "held-lanes-a-claimed-derived-name-takes-its-claim-place": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "    return tuple(lanes + claims)\n",
+    "after": "    return tuple(dict.fromkeys(([derived] if derived else []) + claims))\n",
+    "tests": [
+      "tests/test_sessions.py::test_claiming_the_derived_name_makes_it_the_advertised_one"
+    ]
+  },
+  "claim-written-in-its-post-claim-order": {
+    "file": "hardline_mcp/server.py",
+    "before": "        lanes=adapters.recipients_before_claim(agent, label),",
+    "after": "        lanes=adapters.owned_recipients(agent),",
+    "tests": [
+      "tests/test_sessions.py::test_the_claim_itself_writes_the_order_it_leaves"
+    ]
+  },
+  "claim-before-keeps-a-reclaim-in-place": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "    return tuple(r for r in owned_recipients(agent) if claimed or r != lane)",
+    "after": "    return tuple(r for r in owned_recipients(agent) if r != lane)",
+    "tests": [
+      "tests/test_sessions.py::test_reclaiming_a_held_name_does_not_promote_it"
+    ]
+  },
+  "registry-refused-rerank-needs-this-token": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                            \" WHERE pid = ? AND lane = ? AND process_key IS ?\",\n                            (rank[lane], pid, lane, key),",
+    "after": "                            \" WHERE pid = ? AND lane = ? AND ? IS ? \",\n                            (rank[lane], pid, lane, key, key),",
+    "tests": [
+      "tests/test_sessions.py::test_a_refused_lane_reranks_only_rows_with_this_creation_token"
+    ]
+  },
+  "registry-refused-rerank-null-safe": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                            \" WHERE pid = ? AND lane = ? AND process_key IS ?\",",
+    "after": "                            \" WHERE pid = ? AND lane = ? AND process_key = ?\",",
+    "tests": [
+      "tests/test_sessions.py::test_a_process_without_a_token_reranks_its_own_rows"
+    ]
+  },
+  "registry-refused-rerank-only-this-pid": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                            \" WHERE pid = ? AND lane = ? AND process_key IS ?\",\n                            (rank[lane], pid, lane, key),",
+    "after": "                            \" WHERE ? > 0 AND lane = ? AND (process_key IS ? OR 1)\",\n                            (rank[lane], pid, lane, key),",
+    "tests": [
+      "tests/test_sessions.py::test_a_refused_lane_keeps_its_place_without_being_granted"
+    ]
+  },
+  "server-announces-ranked": {
+    "file": "hardline_mcp/server.py",
+    "before": "            lanes=adapters.owned_recipients(agent),\n            ranked=True,\n            **adapters.host_identity(),\n        )\n        if registration",
+    "after": "            lanes=adapters.owned_recipients(agent),\n            **adapters.host_identity(),\n        )\n        if registration",
+    "tests": [
+      "tests/test_sessions.py::test_the_server_registers_its_names_in_order"
+    ]
+  },
+  "server-claims-ranked": {
+    "file": "hardline_mcp/server.py",
+    "before": "        lanes=adapters.recipients_before_claim(agent, label),\n        ranked=True,\n",
+    "after": "        lanes=adapters.recipients_before_claim(agent, label),\n",
+    "tests": [
+      "tests/test_sessions.py::test_the_server_registers_its_names_in_order"
+    ]
+  },
   "owner-token-snapshot": {
     "file": "hardline_mcp/jobs.py",
     "before": "                    QUEUED,\n                    owner_pid,\n                    owner_key,",

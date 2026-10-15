@@ -937,18 +937,26 @@ def held_lanes() -> tuple[str, ...]:
     stranding that lanes exist to prevent, so a rename adds a name rather than
     replacing one.
 
-    Ordered oldest first: derived lane, then each claim in the order made.
+    Ordered oldest first: derived lane, then each claim in the order made. A
+    claim of the derived name itself takes its place among the claims, so the
+    last lane is always the one ``lane_suffix`` answers to - the order the
+    registry is written in.
     """
-    lanes: list[str] = []
     derived = derived_lane_suffix()
-    if derived:
-        lanes.append(derived)
     with _claim_lock:
-        claims = list(_claimed_lanes)
-    for claim in claims:
-        if claim not in lanes:
-            lanes.append(claim)
-    return tuple(lanes)
+        claims = list(_claimed_lanes)  # unique: claim_lane never repeats one
+    lanes = [derived] if derived and derived not in claims else []
+    return tuple(lanes + claims)
+
+
+def recipients_before_claim(agent: str, label: str) -> tuple[str, ...]:
+    """``owned_recipients`` as they stand before ``label`` is claimed, with it
+    left out unless already a claim: the claim goes last, as ``claim_lane``
+    will put it, even when it is the derived name. A re-claim keeps its place."""
+    lane = f"{base_agent(agent)}:{label.strip()}"
+    with _claim_lock:
+        claimed = label.strip() in _claimed_lanes
+    return tuple(r for r in owned_recipients(agent) if claimed or r != lane)
 
 
 def lane_for(agent: str) -> str:
