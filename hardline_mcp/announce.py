@@ -56,6 +56,8 @@ class Announcer:
         self.pointed: dict[str, int] = {}  # name held before -> newest id told
         self._previous_pointed: dict[str, int] = {}  # restored by take_back
         self.facts: dict = {}
+        self.routes: dict = {}  # delivery.ROUTE_KEYS, a table of their own
+        self._routes_dirty = False
         self._previous_push: Optional[datetime] = None  # restored by take_back
         self._dirty = False
         self._pruned = False
@@ -115,9 +117,11 @@ class Announcer:
         with self._lock:
             notes, self._notes = self._notes, []
             facts, dirty, self._dirty = dict(self.facts), self._dirty, False
+            routes, routes_dirty = dict(self.routes), self._routes_dirty
+            self._routes_dirty = False
         for note in notes:
             channel._log(note)
-        if not dirty:
+        if not dirty and not routes_dirty:
             return
         try:
             pid, key = procid.current_identity()
@@ -126,11 +130,28 @@ class Announcer:
             if not self._pruned:
                 delivery.prune()
                 self._pruned = True
-            delivery.record(pid, key, **facts)
         except Exception as exc:  # noqa: BLE001
             with self._lock:
-                self._dirty = True  # retried on the next poll
+                self._dirty = self._dirty or dirty
+                self._routes_dirty = self._routes_dirty or routes_dirty
             channel._log(f"{self.transport} delivery facts not recorded: {type(exc).__name__}: {exc}")
+            return
+        # Separate writes: a failure of one is retried, and never loses the other.
+        for what, wanted, write, args in (
+            ("delivery facts", dirty, delivery.record, facts),
+            ("route facts", routes_dirty, delivery.record_routes, routes),
+        ):
+            if not wanted:
+                continue
+            try:
+                write(pid, key, **args)
+            except Exception as exc:  # noqa: BLE001
+                with self._lock:
+                    if what == "delivery facts":
+                        self._dirty = True  # retried on the next poll
+                    else:
+                        self._routes_dirty = True
+                channel._log(f"{self.transport} {what} not recorded: {type(exc).__name__}: {exc}")
 
     def poll(self) -> Optional[tuple[object, str, set[int]]]:
         """``(address, nonce, ids)`` to send now, if anything. Blocking; off the loop.

@@ -27,14 +27,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Optional
 
-from .mailbox import PUSH_DELIVERY_TABLE, _connect, _iso, _resolve_db
+from .mailbox import CODEX_ROUTES_TABLE, PUSH_DELIVERY_TABLE, _connect, _iso, _resolve_db
 from .procid import DEAD, instance_state
 
 GRACE = timedelta(minutes=10)
+ROUTE_KEYS = ("last_route", "last_route_reason", "steered", "queued", "ambiguous")
 
 
 def _ensure(conn: sqlite3.Connection) -> None:
     conn.execute(PUSH_DELIVERY_TABLE)
+    conn.execute(CODEX_ROUTES_TABLE)
 
 
 def prune(*, db_path: Optional[Path] = None) -> None:
@@ -45,13 +47,12 @@ def prune(*, db_path: Optional[Path] = None) -> None:
     """
     with closing(_connect(_resolve_db(db_path))) as conn:
         _ensure(conn)
-        rows = conn.execute("SELECT pid, process_key FROM push_delivery").fetchall()
-        dead = [tuple(r) for r in rows if instance_state(r[0], r[1]) == DEAD]
-        if dead:
-            with conn:
-                conn.executemany(
-                    "DELETE FROM push_delivery WHERE pid = ? AND process_key = ?", dead
-                )
+        for table in ("push_delivery", "codex_routes"):
+            rows = conn.execute(f"SELECT pid, process_key FROM {table}").fetchall()
+            dead = [tuple(r) for r in rows if instance_state(r[0], r[1]) == DEAD]
+            if dead:
+                with conn:
+                    conn.executemany(f"DELETE FROM {table} WHERE pid = ? AND process_key = ?", dead)
 
 
 def record(
@@ -70,7 +71,9 @@ def record(
         with conn:
             _ensure(conn)
             conn.execute(
-                "INSERT OR REPLACE INTO push_delivery VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO push_delivery (pid, process_key, declared_at,"
+                " last_push_at, last_receipted_push_at, oldest_unreceipted_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     pid,
                     process_key,
@@ -79,6 +82,21 @@ def record(
                     stamp(last_receipted_push_at),
                     stamp(oldest_unreceipted_at),
                 ),
+            )
+
+
+def record_routes(pid: int, process_key: str, *, db_path: Optional[Path] = None, **routes) -> None:
+    """Write which way this process's Codex notices went (``ROUTE_KEYS``): its
+    own running totals, replacing its previous row. A table of its own, apart
+    from ``record``, so neither write can lose the other."""
+    with closing(_connect(_resolve_db(db_path))) as conn:
+        with conn:
+            _ensure(conn)
+            conn.execute(
+                "INSERT OR REPLACE INTO codex_routes (pid, process_key, "
+                + ", ".join(ROUTE_KEYS)
+                + ") VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (pid, process_key, *(routes.get(k) for k in ROUTE_KEYS)),
             )
 
 

@@ -191,7 +191,9 @@ def record_revision(revision: Optional[str], *, db_path: Optional[Path] = None) 
             return
         with conn:
             conn.execute(
-                "INSERT OR REPLACE INTO process_revisions VALUES (?, ?, ?)", (pid, key, revision)
+                "INSERT OR REPLACE INTO process_revisions (pid, process_key, revision)"
+                " VALUES (?, ?, ?)",
+                (pid, key, revision),
             )
 
 

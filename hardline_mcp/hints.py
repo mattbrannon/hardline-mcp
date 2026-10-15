@@ -60,7 +60,7 @@ def record(
             if not conversation:
                 return
             conn.execute(
-                "INSERT INTO lane_hints VALUES (?, ?, ?, ?)",
+                "INSERT INTO lane_hints (recipient, conversation, writer, held_at) VALUES (?, ?, ?, ?)",
                 (lane, conversation, writer, _iso(_default_now())),
             )
             # Newest kept: a reinserted row gets a new rowid.
