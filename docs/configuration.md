@@ -256,7 +256,7 @@ a fallback.
 | --- | --- | --- |
 | `HARDLINE_CLAUDE_TIMEOUT_S` | `14400`, or `900` for a bare call | Claude subprocess ceiling in seconds. |
 | `HARDLINE_CODEX_TIMEOUT_S` | `14400` | Codex subprocess ceiling in seconds. |
-| `HARDLINE_CLAUDE_IDLE_S`, `HARDLINE_CODEX_IDLE_S` | `1800` | Seconds with no output after which a streaming run is stopped as wedged. |
+| `HARDLINE_CLAUDE_IDLE_S`, `HARDLINE_CODEX_IDLE_S` | `3600` | Seconds with no output after which a streaming run is stopped as wedged. Above the ceiling, the ceiling alone applies. |
 | `HARDLINE_ASYNC_MAX_WORKERS` | `4` | Concurrent background workers per MCP server. |
 | `HARDLINE_ASYNC_MAX_PENDING` | Four times the worker count | Accepted jobs, running plus queued, per server. |
 | `HARDLINE_GITHUB_TIMEOUT_S` | `60` | One deadline for every `gh` call that collects a pull request. |
@@ -273,6 +273,14 @@ written. A bare `ask_claude(prompt=...)` prints only at the end, so it has no
 idle limit and keeps the 900-second ceiling. A fixed 900 seconds had killed a
 healthy review that had written a megabyte of events, while a wedged run sat
 out its whole budget.
+
+Silence is a policy, not proof of a hang. Codex's `--json` stream carries
+completed items, not reasoning or command-output deltas, and Claude's carries
+whole messages, so a long tool call or a long stretch of reasoning writes
+nothing. No recorded run bounds a healthy silence, hence the hour. The limit
+holds over a grandchild left holding the output after its launcher exits. One
+the kill cannot reach (on Windows, an orphan of an exited launcher) is left
+running, and the result says `capture_incomplete: true`.
 
 These values must be positive integers. Worker limits are read at startup;
 invalid timeout values fail the call before spawning an agent. Hermes uses a

@@ -1,10 +1,50 @@
 {
   "watched-run-judged-by-silence-not-age": {
     "file": "hardline_mcp/adapters.py",
-    "before": "            silent = now - heard[0] >= idle_s\n",
-    "after": "            silent = now - started >= idle_s\n",
+    "before": "        silent = now - heard[0] >= idle_s\n",
+    "after": "        silent = now - started >= idle_s\n",
     "tests": [
       "tests/test_watched_runs.py::test_a_run_that_keeps_writing_outlives_the_idle_limit"
+    ]
+  },
+  "watched-run-drains-before-closing": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "            complete = settle(_DRAIN_S)\n",
+    "after": "            for stream in streams.values():\n                with contextlib.suppress(Exception):\n                    stream.close()\n            complete = settle(_DRAIN_S)\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_a_pipe_is_drained_before_it_is_closed"
+    ]
+  },
+  "watched-run-kills-the-tree": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "            _kill_tree(proc)\n            try:\n                proc.wait(timeout=_DRAIN_S)",
+    "after": "            proc.kill()\n            try:\n                proc.wait(timeout=_DRAIN_S)",
+    "tests": [
+      "tests/test_watched_runs.py::test_a_limit_kills_the_tree_and_drains_it"
+    ]
+  },
+  "watched-run-watches-until-eof": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "        if exited and not running:\n            break\n",
+    "after": "        if exited:\n            break\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_limits_hold_over_a_grandchild_left_holding_the_pipes"
+    ]
+  },
+  "watched-run-decodes-the-joined-bytes": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "        decoded = b\"\".join(chunks[name]).decode(\"utf-8\", errors=\"replace\")\n",
+    "after": "        decoded = \"\".join(c.decode(\"utf-8\", errors=\"replace\") for c in chunks[name])\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_a_sequence_split_across_reads_decodes_whole"
+    ]
+  },
+  "kill-tree-reaches-the-group-after-the-leader": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "                os.killpg(proc.pid, signal.SIGKILL)\n",
+    "after": "                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_limits_hold_over_a_grandchild_left_holding_the_pipes"
     ]
   },
   "watched-run-stderr-counts": {
@@ -17,16 +57,16 @@
   },
   "watched-run-silence-ends-it": {
     "file": "hardline_mcp/adapters.py",
-    "before": "            silent = now - heard[0] >= idle_s\n",
-    "after": "            silent = False\n",
+    "before": "        silent = now - heard[0] >= idle_s\n",
+    "after": "        silent = False\n",
     "tests": [
       "tests/test_watched_runs.py::test_a_silent_run_is_stopped_as_wedged_with_what_it_wrote"
     ]
   },
   "watched-run-ceiling-still-applies": {
     "file": "hardline_mcp/adapters.py",
-    "before": "            if not silent and now - started < timeout_s:\n",
-    "after": "            if not silent:\n",
+    "before": "        if silent or now - started >= timeout_s:\n",
+    "after": "        if silent:\n",
     "tests": [
       "tests/test_watched_runs.py::test_the_ceiling_still_ends_a_run_that_never_stops_writing"
     ]

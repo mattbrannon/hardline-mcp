@@ -113,8 +113,15 @@ _CODEX_TIMEOUT_S = 14400
 # and ends early only after this long with no output at all
 # (HARDLINE_<AGENT>_IDLE_S). The plain `claude -p` call prints nothing until it
 # is done, so it keeps its wall clock.
+#
+# An inactivity policy, not proof of a hang: neither stream is a heartbeat.
+# Codex exec --json emits completed items and drops reasoning and
+# command-output deltas, and Claude without --include-partial-messages emits
+# whole messages, so a long tool call or reasoning stretch is silent. No
+# recorded run bounds a healthy silence, so the default is an hour; set it
+# above the ceiling for the ceiling alone.
 _STREAMING_TIMEOUT_S = 14400
-_IDLE_S = 1800
+_IDLE_S = 3600
 
 _CODEX_EFFORTS = frozenset(
     {"default", "low", "medium", "high", "xhigh", "max", "ultra"}
@@ -1278,6 +1285,11 @@ def _run_cmd(
         }
         if idle_s is not None:
             response["idle_s"] = idle_s
+        if getattr(exc, "capture_complete", True) is False:
+            # A descendant the kill could not reach still holds a pipe.
+            response["capture_incomplete"] = True
+        if getattr(exc, "reaped", True) is False:
+            response["child_reaped"] = False
         if partial_out:
             response["partial_stdout"] = _raw_evidence(partial_out)
         if partial_err:
@@ -1429,7 +1441,13 @@ def _kill_tree(proc: subprocess.Popen) -> None:
             import signal
 
             try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                # Every child here was started with start_new_session, so it
+                # leads a group whose id is its pid. That group outlives the
+                # child while any member does, and its id is not reused until
+                # then: addressed directly, it reaches a grandchild still
+                # holding the pipes after the launcher has exited and been
+                # reaped, which getpgid of the gone pid could not.
+                os.killpg(proc.pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError, OSError):
                 proc.kill()
     except BaseException:  # noqa: BLE001 - must not replace a propagating exc
@@ -1441,7 +1459,7 @@ def _kill_tree(proc: subprocess.Popen) -> None:
 
 class _Watched(subprocess.TimeoutExpired):
     """The ceiling passed under ``_communicate_watched``: the tree is already
-    killed and both pipes drained into ``stdout``/``stderr``."""
+    killed and the pipes drained as far as they would go."""
 
 
 class _Silent(_Watched):
@@ -1451,63 +1469,95 @@ class _Silent(_Watched):
 _WATCH_TICK_S = 1.0  # how often a watched run's age and silence are checked
 
 
+_DRAIN_S = 10.0  # after a kill: how long the pipes get to reach EOF
+
+
+def _read_piece(raw) -> bytes:
+    """Whatever has arrived on a pipe, up to 64 KiB (a seam for tests)."""
+    return raw.read1(65536)
+
+
 def _communicate_watched(proc: subprocess.Popen, timeout_s: float, idle_s: float):
     """``proc.communicate`` that also ends a run silent for ``idle_s``.
 
-    Each pipe is read by a thread of its own in whatever pieces arrive
-    (``read1``), so the clock restarts on any byte, not on a full buffer. The
-    bytes are decoded once at the end, as ``text=True`` would have: UTF-8 with
-    replacement, universal newlines. Raises ``_Silent`` or ``_Watched`` with
-    the tree killed and everything read so far attached, so the caller's
-    timeout path has nothing left to drain.
+    Each pipe is read by a thread of its own in whatever pieces arrive, so the
+    clock restarts on any byte, not on a full buffer. The bytes are decoded
+    once at the end, as ``text=True`` would have: UTF-8 with replacement,
+    universal newlines; a sequence split across reads is joined first.
+
+    Watching lasts until both pipes reach EOF, not until the child exits: a
+    launcher can exit while a grandchild still holds its output, and the
+    limits hold over that grandchild too. On a limit the tree is killed, the
+    child waited for, and each pipe drained to EOF before it is closed. A pipe
+    is never closed under a live reader: that blocks on the reader's lock, and
+    discards what it had not yet read. One still held after ``_DRAIN_S`` - a
+    descendant the kill could not reach - is left open, and the exception says
+    capture is incomplete. Raises ``_Silent`` or ``_Watched`` carrying the
+    output, ``reaped`` and ``capture_complete``.
     """
     started = time.monotonic()
     heard = [started]
-    chunks: dict[str, list[bytes]] = {"stdout": [], "stderr": []}
+    streams = {"stdout": proc.stdout, "stderr": proc.stderr}
+    chunks: dict[str, list[bytes]] = {name: [] for name in streams}
 
-    def drain(name: str, stream) -> None:
-        raw = stream.buffer
+    def drain(name: str) -> None:
+        raw = streams[name].buffer
         try:
-            while piece := raw.read1(65536):
+            while piece := _read_piece(raw):
                 chunks[name].append(piece)
                 heard[0] = time.monotonic()
-        except (OSError, ValueError):  # closed under us by a kill
+        except (OSError, ValueError):
             pass
 
-    readers = [
-        threading.Thread(target=drain, args=(n, s), name=f"hardline-{n}", daemon=True)
-        for n, s in (("stdout", proc.stdout), ("stderr", proc.stderr))
-    ]
-    for reader in readers:
+    readers = {
+        name: threading.Thread(target=drain, args=(name,), name=f"hardline-{name}", daemon=True)
+        for name in streams
+    }
+    for reader in readers.values():
         reader.start()
 
     def text(name: str) -> str:
         decoded = b"".join(chunks[name]).decode("utf-8", errors="replace")
         return decoded.replace("\r\n", "\n").replace("\r", "\n")
 
-    def finish(wait_s: float) -> None:
-        for reader in readers:
-            reader.join(wait_s)
-        for stream in (proc.stdout, proc.stderr):
-            with contextlib.suppress(Exception):
-                stream.close()
+    def settle(wait_s: float) -> bool:
+        """Join the readers within ``wait_s`` and close each finished pipe;
+        whether every reader finished."""
+        deadline = time.monotonic() + wait_s
+        for reader in readers.values():
+            reader.join(max(0.0, deadline - time.monotonic()))
+        for name, reader in readers.items():
+            if not reader.is_alive():
+                with contextlib.suppress(Exception):
+                    streams[name].close()
+        return not any(reader.is_alive() for reader in readers.values())
 
     while True:
-        try:
-            proc.wait(timeout=_WATCH_TICK_S)
+        exited = proc.poll() is not None
+        running = [reader for reader in readers.values() if reader.is_alive()]
+        if exited and not running:
             break
-        except subprocess.TimeoutExpired:
-            now = time.monotonic()
-            silent = now - heard[0] >= idle_s
-            if not silent and now - started < timeout_s:
-                continue
+        now = time.monotonic()
+        silent = now - heard[0] >= idle_s
+        if silent or now - started >= timeout_s:
             _kill_tree(proc)
-            _reap(proc)
-            finish(10)
-            kind = _Silent if silent else _Watched
-            raise kind(proc.args, timeout_s, output=text("stdout"), stderr=text("stderr"))
-    # Exited: its pipes reach EOF once any grandchild holding them is gone too.
-    finish(30)
+            try:
+                proc.wait(timeout=_DRAIN_S)
+                reaped = True
+            except subprocess.TimeoutExpired:
+                reaped = False
+            complete = settle(_DRAIN_S)
+            exc = (_Silent if silent else _Watched)(
+                proc.args, timeout_s, output=text("stdout"), stderr=text("stderr")
+            )
+            exc.reaped, exc.capture_complete = reaped, complete
+            raise exc
+        if not exited:
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                proc.wait(timeout=_WATCH_TICK_S)
+        else:  # the child is gone; something it left still holds a pipe
+            running[0].join(_WATCH_TICK_S)
+    settle(0)
     return text("stdout"), text("stderr")
 
 
