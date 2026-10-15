@@ -38,6 +38,7 @@ Only the executable is resolved this way; the fixed subcommand
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -105,6 +106,15 @@ _CLAUDE_TIMEOUT_S = 900
 # but allow four hours by default; HARDLINE_CODEX_TIMEOUT_S remains the operator
 # override for installations that need a tighter or looser ceiling.
 _CODEX_TIMEOUT_S = 14400
+# A run that streams its progress (Claude stream-json, Codex --json) is judged
+# by silence, not age: a wall clock alone killed a healthy review that had
+# written a megabyte of events at fifteen minutes, while a wedged one sat out
+# the whole budget. So a streaming run gets the long ceiling, for Claude too,
+# and ends early only after this long with no output at all
+# (HARDLINE_<AGENT>_IDLE_S). The plain `claude -p` call prints nothing until it
+# is done, so it keeps its wall clock.
+_STREAMING_TIMEOUT_S = 14400
+_IDLE_S = 1800
 
 _CODEX_EFFORTS = frozenset(
     {"default", "low", "medium", "high", "xhigh", "max", "ultra"}
@@ -1077,13 +1087,21 @@ def positive_int_env(key: str, default: int, *, unit: str = "") -> int:
     return value
 
 
-def _timeout_for(agent: str) -> int:
+def _timeout_for(agent: str, *, streaming: bool = False) -> int:
     if agent not in {"claude", "codex"}:
         return _TIMEOUT_S
-    default = _CLAUDE_TIMEOUT_S if agent == "claude" else _CODEX_TIMEOUT_S
+    if streaming:
+        default = _STREAMING_TIMEOUT_S
+    else:
+        default = _CLAUDE_TIMEOUT_S if agent == "claude" else _CODEX_TIMEOUT_S
     return positive_int_env(
         f"HARDLINE_{agent.upper()}_TIMEOUT_S", default, unit="seconds"
     )
+
+
+def _idle_for(agent: str) -> int:
+    """Seconds of silence after which a streaming run is taken as wedged."""
+    return positive_int_env(f"HARDLINE_{agent.upper()}_IDLE_S", _IDLE_S, unit="seconds")
 
 
 def _run_cmd(
@@ -1095,10 +1113,16 @@ def _run_cmd(
     capture_failed_output: bool = False,
     on_spawn: "Callable[[int], None] | None" = None,
     stdin_text: str | None = None,
+    idle_s: int | None = None,
 ) -> dict:
     """Run argv, capturing text output. Never raises — every failure mode is
     mapped to ``{"ok": False, "error": ...}`` so one dead target can't crash
     the MCP tool call.
+
+    ``idle_s``: also end the run once it has written nothing, on either
+    stream, for that long (``_communicate_watched``); ``timeout_s`` stays the
+    ceiling. For children that stream progress; a quiet one would be killed
+    for thinking.
 
     ``on_spawn`` receives the child's pid as soon as it exists, so a durable
     job can record it and a cancel from another process can reach a run this
@@ -1203,7 +1227,12 @@ def _run_cmd(
             )
             writer.start()
             stdin_pipe = None  # the writer owns it now, and closes it
-        stdout, stderr = proc.communicate(timeout=timeout_s)
+        # Watching needs real pipes to read; a process without them (a test
+        # double) is waited on as before.
+        if idle_s is None or getattr(proc.stdout, "buffer", None) is None:
+            stdout, stderr = proc.communicate(timeout=timeout_s)
+        else:
+            stdout, stderr = _communicate_watched(proc, timeout_s, idle_s)
     except subprocess.TimeoutExpired as exc:
         # Kill the TREE, not just the child. `claude`/`codex` are launchers
         # that spawn the real worker, so killing the recorded pid alone left
@@ -1213,11 +1242,13 @@ def _run_cmd(
         # be reaped and the pipes closed: subprocess.run() guarantees that in
         # its own except/finally, and this conversion has to match it or a
         # timeout leaks a zombie and two file descriptors every time.
-        _kill_tree(proc)
-        try:
-            exc.stdout, exc.stderr = proc.communicate(timeout=10)
-        except Exception:  # noqa: BLE001 - drain is best effort
-            _reap(proc)
+        idle = isinstance(exc, _Silent)
+        if not idle and not isinstance(exc, _Watched):
+            _kill_tree(proc)
+            try:
+                exc.stdout, exc.stderr = proc.communicate(timeout=10)
+            except Exception:  # noqa: BLE001 - drain is best effort
+                _reap(proc)
         # TimeoutExpired carries whatever the child had already written, and
         # discarding it made every timeout indistinguishable: a bare
         # "timeout after 900s" cannot tell a caller whether the agent was
@@ -1228,11 +1259,16 @@ def _run_cmd(
         partial_err = _as_text(exc.stderr)
         response = {
             "ok": False,
-            "error": f"timeout after {timeout_s}s",
+            "error": (
+                f"no output for {idle_s}s: taken as wedged and stopped"
+                if idle
+                else f"timeout after {timeout_s}s"
+            ),
             "timed_out": True,
             "timeout_s": timeout_s,
             "elapsed_s": round(elapsed, 1),
             "timeout_layer": "subprocess",
+            "timeout_kind": "idle" if idle else "ceiling",
             "stdout_chars": len(partial_out),
             "stderr_chars": len(partial_err),
             # The cheap slow-vs-wedged signal available without streaming:
@@ -1240,6 +1276,8 @@ def _run_cmd(
             # very different from one cut off mid-answer.
             "produced_output": bool(partial_out or partial_err),
         }
+        if idle_s is not None:
+            response["idle_s"] = idle_s
         if partial_out:
             response["partial_stdout"] = _raw_evidence(partial_out)
         if partial_err:
@@ -1401,6 +1439,78 @@ def _kill_tree(proc: subprocess.Popen) -> None:
             pass
 
 
+class _Watched(subprocess.TimeoutExpired):
+    """The ceiling passed under ``_communicate_watched``: the tree is already
+    killed and both pipes drained into ``stdout``/``stderr``."""
+
+
+class _Silent(_Watched):
+    """No output for ``idle_s``: taken as wedged. Killed and drained likewise."""
+
+
+_WATCH_TICK_S = 1.0  # how often a watched run's age and silence are checked
+
+
+def _communicate_watched(proc: subprocess.Popen, timeout_s: float, idle_s: float):
+    """``proc.communicate`` that also ends a run silent for ``idle_s``.
+
+    Each pipe is read by a thread of its own in whatever pieces arrive
+    (``read1``), so the clock restarts on any byte, not on a full buffer. The
+    bytes are decoded once at the end, as ``text=True`` would have: UTF-8 with
+    replacement, universal newlines. Raises ``_Silent`` or ``_Watched`` with
+    the tree killed and everything read so far attached, so the caller's
+    timeout path has nothing left to drain.
+    """
+    started = time.monotonic()
+    heard = [started]
+    chunks: dict[str, list[bytes]] = {"stdout": [], "stderr": []}
+
+    def drain(name: str, stream) -> None:
+        raw = stream.buffer
+        try:
+            while piece := raw.read1(65536):
+                chunks[name].append(piece)
+                heard[0] = time.monotonic()
+        except (OSError, ValueError):  # closed under us by a kill
+            pass
+
+    readers = [
+        threading.Thread(target=drain, args=(n, s), name=f"hardline-{n}", daemon=True)
+        for n, s in (("stdout", proc.stdout), ("stderr", proc.stderr))
+    ]
+    for reader in readers:
+        reader.start()
+
+    def text(name: str) -> str:
+        decoded = b"".join(chunks[name]).decode("utf-8", errors="replace")
+        return decoded.replace("\r\n", "\n").replace("\r", "\n")
+
+    def finish(wait_s: float) -> None:
+        for reader in readers:
+            reader.join(wait_s)
+        for stream in (proc.stdout, proc.stderr):
+            with contextlib.suppress(Exception):
+                stream.close()
+
+    while True:
+        try:
+            proc.wait(timeout=_WATCH_TICK_S)
+            break
+        except subprocess.TimeoutExpired:
+            now = time.monotonic()
+            silent = now - heard[0] >= idle_s
+            if not silent and now - started < timeout_s:
+                continue
+            _kill_tree(proc)
+            _reap(proc)
+            finish(10)
+            kind = _Silent if silent else _Watched
+            raise kind(proc.args, timeout_s, output=text("stdout"), stderr=text("stderr"))
+    # Exited: its pipes reach EOF once any grandchild holding them is gone too.
+    finish(30)
+    return text("stdout"), text("stderr")
+
+
 def _as_text(stream: object) -> str:
     """Normalize a TimeoutExpired stream to str.
 
@@ -1454,13 +1564,16 @@ def _agent_env(env: dict | None) -> dict:
 
 
 def _run_agent_cmd(
-    agent: str, argv: list[str], *, env: dict | None = None, **kwargs
+    agent: str, argv: list[str], *, env: dict | None = None, streaming: bool = False, **kwargs
 ) -> dict:
+    """``streaming``: the child writes progress as it works, so it is bounded
+    by silence (``_idle_for``) under the long ceiling, not by age alone."""
     try:
-        timeout_s = _timeout_for(agent)
+        timeout_s = _timeout_for(agent, streaming=streaming)
+        idle_s = _idle_for(agent) if streaming else None
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
-    return _run_cmd(argv, timeout_s=timeout_s, env=_agent_env(env), **kwargs)
+    return _run_cmd(argv, timeout_s=timeout_s, idle_s=idle_s, env=_agent_env(env), **kwargs)
 
 
 _CODEX_QUEUE_TIMEOUT_S = 30
@@ -2752,6 +2865,7 @@ def _ask_codex_structured(
             argv + ["--", prompt],
             env=child_env,
             cwd=run_cwd,
+            streaming=True,  # --json, above
             capture_failed_output=True,
             on_spawn=on_spawn,
             stdin_text=attachment["stdin"] if attachment is not None else None,
@@ -3321,6 +3435,7 @@ def _ask_claude_structured(
             argv,
             env=child_env,
             cwd=run_cwd,
+            streaming=True,  # stream-json, above
             capture_failed_output=True,
             on_spawn=on_spawn,
             stdin_text=attachment["stdin"] if attachment is not None else None,

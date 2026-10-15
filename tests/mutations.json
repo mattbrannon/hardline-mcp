@@ -1,4 +1,76 @@
 {
+  "watched-run-judged-by-silence-not-age": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "            silent = now - heard[0] >= idle_s\n",
+    "after": "            silent = now - started >= idle_s\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_a_run_that_keeps_writing_outlives_the_idle_limit"
+    ]
+  },
+  "watched-run-stderr-counts": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "                chunks[name].append(piece)\n                heard[0] = time.monotonic()\n",
+    "after": "                chunks[name].append(piece)\n                if name == \"stdout\":\n                    heard[0] = time.monotonic()\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_writing_to_stderr_alone_counts_as_alive"
+    ]
+  },
+  "watched-run-silence-ends-it": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "            silent = now - heard[0] >= idle_s\n",
+    "after": "            silent = False\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_a_silent_run_is_stopped_as_wedged_with_what_it_wrote"
+    ]
+  },
+  "watched-run-ceiling-still-applies": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "            if not silent and now - started < timeout_s:\n",
+    "after": "            if not silent:\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_the_ceiling_still_ends_a_run_that_never_stops_writing"
+    ]
+  },
+  "watched-run-universal-newlines": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "        return decoded.replace(\"\\r\\n\", \"\\n\").replace(\"\\r\", \"\\n\")\n",
+    "after": "        return decoded\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_output_decodes_as_text_mode_would"
+    ]
+  },
+  "watched-run-only-when-streaming": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "        idle_s = _idle_for(agent) if streaming else None\n",
+    "after": "        idle_s = _idle_for(agent)\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_only_a_streaming_agent_run_is_watched"
+    ]
+  },
+  "streaming-run-long-ceiling": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "    if streaming:\n        default = _STREAMING_TIMEOUT_S\n    else:\n",
+    "after": "    if False:\n        default = _STREAMING_TIMEOUT_S\n    else:\n",
+    "tests": [
+      "tests/test_watched_runs.py::test_only_a_streaming_agent_run_is_watched"
+    ]
+  },
+  "claude-structured-run-streams": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "            streaming=True,  # stream-json, above\n",
+    "after": "",
+    "tests": [
+      "tests/test_adapters.py::test_structured_runs_are_watched_and_the_plain_one_is_not"
+    ]
+  },
+  "codex-run-streams": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "            streaming=True,  # --json, above\n",
+    "after": "",
+    "tests": [
+      "tests/test_adapters.py::test_structured_runs_are_watched_and_the_plain_one_is_not"
+    ]
+  },
   "registry-ranks-from-the-held-order": {
     "file": "hardline_mcp/sessions.py",
     "before": "    rank = {lane: i for i, lane in enumerate(requested, 1)} if ranked else {}",
