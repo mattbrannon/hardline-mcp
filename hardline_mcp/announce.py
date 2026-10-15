@@ -137,9 +137,9 @@ class Announcer:
             channel._log(f"{self.transport} delivery facts not recorded: {type(exc).__name__}: {exc}")
             return
         # Separate writes: a failure of one is retried, and never loses the other.
-        for what, wanted, write, args in (
-            ("delivery facts", dirty, delivery.record, facts),
-            ("route facts", routes_dirty, delivery.record_routes, routes),
+        for what, flag, wanted, write, args in (
+            ("delivery facts", "_dirty", dirty, delivery.record, facts),
+            ("route facts", "_routes_dirty", routes_dirty, delivery.record_routes, routes),
         ):
             if not wanted:
                 continue
@@ -147,10 +147,7 @@ class Announcer:
                 write(pid, key, **args)
             except Exception as exc:  # noqa: BLE001
                 with self._lock:
-                    if what == "delivery facts":
-                        self._dirty = True  # retried on the next poll
-                    else:
-                        self._routes_dirty = True
+                    setattr(self, flag, True)  # retried on the next poll
                 channel._log(f"{self.transport} {what} not recorded: {type(exc).__name__}: {exc}")
 
     def poll(self) -> Optional[tuple[object, str, set[int]]]:

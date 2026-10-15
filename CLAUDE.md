@@ -239,7 +239,12 @@ destroyed. Give the new shape a new table name and let the old one rot. That is
 why the session table is `agent_sessions`. A nullable column may be added
 instead, through `mailbox._ADDED_COLUMNS` only: initialization adds it, and
 `_connect` checks for it on every connection, because a store an older revision
-rebuilt lacks it while this process's initialization is cached (#67).
+rebuilt lacks it while this process's initialization is cached (#67). Only
+for a table that every running revision writes with named columns: an older
+positional `INSERT ... VALUES (?, ?, ...)` fails in every server still running
+it the moment a column is added. `push_delivery`, `lane_hints` and
+`process_revisions` had such writers until #86, so they get no columns until
+those revisions are gone; `tests/test_schema_writers.py` refuses new ones.
 
 **SQLite specifics.** WAL is a persistent DB-header property — set it once per
 file, not per connection. A consuming read must take `BEGIN IMMEDIATE`, because
