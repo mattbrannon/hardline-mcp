@@ -1851,6 +1851,66 @@ def test_two_claims_in_the_same_second_keep_their_order(tmp_path):
     assert entry["lane"] == "codex:alpha", "the most recent claim is the current name"
 
 
+def test_a_derived_lane_granted_after_a_claim_is_not_advertised_over_it(tmp_path):
+    """Refused at startup and regained later, the derived lane used to be
+    inserted last and advertised, while the process answered to its claim."""
+    db = tmp_path / "mb.db"
+    assert sessions.claim(agent="codex", label="role", db_path=db, ranked=True)["ok"]
+    sessions.register(
+        agent="codex", lanes=["codex:derived", "codex:role"], db_path=db, ranked=True
+    )
+    entry = sessions.live(db_path=db)[0]
+    assert entry["lanes"] == ["codex:derived", "codex:role"]
+    assert entry["lane"] == "codex:role", "the claim is the current name"
+    raw = sqlite3.connect(db)
+    seqs = dict(raw.execute("SELECT lane, seq FROM agent_sessions"))
+    raw.close()
+    assert seqs == {"codex:derived": 1, "codex:role": 2}, "ranks, not ties"
+
+
+@pytest.mark.anyio
+async def test_the_server_registers_its_names_in_order(codex_session, monkeypatch):
+    from hardline_mcp import server
+
+    seen = []
+    for name in ("register", "claim"):
+        real = getattr(sessions, name)
+        monkeypatch.setattr(
+            sessions, name, lambda *a, _real=real, _name=name, **kw: seen.append(
+                (_name, kw.get("ranked"))
+            ) or _real(*a, **kw),
+        )
+    assert (await server.register_session(label="role"))["ok"] is True
+    server._announce_self("codex")
+    assert ("claim", True) in seen and ("register", True) in seen, seen
+
+
+def test_a_refused_lane_keeps_its_place_without_being_granted(holder):
+    """A held set that cannot all be refreshed is still written in order: the
+    refused lane's own row is re-ranked, never re-granted."""
+    pid, key = procid.current_identity()
+    raw = sqlite3.connect(holder)
+    with raw:  # this process's own, contested row for the held lane
+        raw.execute(
+            "INSERT INTO agent_sessions (pid, lane, agent, process_key, started_at,"
+            " last_seen, claimed_at, seq) VALUES (?, 'codex:taken', 'codex', ?, 't', 't', 't', 1)",
+            (pid, key),
+        )
+    raw.close()
+    got = sessions.register(
+        agent="codex",
+        lanes=["codex:derived", "codex:taken", "codex:role"],
+        db_path=holder,
+        ranked=True,
+    )
+    assert got["contested"] == ["codex:taken"]
+    raw = sqlite3.connect(holder)
+    seqs = dict(raw.execute("SELECT lane, seq FROM agent_sessions WHERE pid = ?", (pid,)))
+    raw.close()
+    assert seqs == {"codex:derived": 1, "codex:taken": 2, "codex:role": 3}
+    assert len(sessions.holders("codex:taken", db_path=holder)) == 2, "nothing was taken over"
+
+
 @pytest.mark.anyio
 async def test_release_session_gives_a_name_back(codex_session):
     """The correction path a mistaken claim previously had no way to undo.
