@@ -211,7 +211,16 @@ then be sent again rather than deduplicated. Nothing hardline sends is
 affected.
 
 **What it does not change:** the notice text, the gate, receipts and the
-delivery facts. Which route each notice took is logged.
+delivery facts. Which route each notice took is logged, and also recorded in the
+`codex_routes` table, one row per process: `last_route` (`steer`, `queue` or
+`ambiguous`), `last_route_reason` (why it was queued, or what left a steer
+unconfirmed; empty when steered) and running counts `steered`, `queued` and
+`ambiguous`. A steer that may have landed is counted apart, never as steered.
+The facts live in their own table, written apart from `push_delivery`, because
+older revisions write `push_delivery` with positional values, which a column
+added there would break in every running server. Rows of dead processes are
+pruned with `push_delivery`'s. `hardline-mcp report` shows them under
+`codex_routes`.
 
 ### Delivery state and receipts
 

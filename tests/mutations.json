@@ -1667,8 +1667,8 @@
   },
   "codexwake-failed-facts-retried": {
     "file": "hardline_mcp/announce.py",
-    "before": "                self._dirty = True  # retried on the next poll\n",
-    "after": "                pass\n",
+    "before": "                    setattr(self, flag, True)  # retried on the next poll\n",
+    "after": "                    pass\n",
     "tests": [
       "tests/test_codex_queue.py::test_a_failed_fact_write_is_retried"
     ]
@@ -3407,8 +3407,8 @@
   },
   "codexwake-accepted-steer-is-not-queued": {
     "file": "hardline_mcp/codex_queue.py",
-    "before": "                self._note(f\"codex notice steered into turn {turn} ({outcome.server})\")\n                return\n",
-    "after": "                self._note(f\"codex notice steered into turn {turn} ({outcome.server})\")\n",
+    "before": "                self._note(f\"codex notice steered into turn {turn} ({outcome.server})\")\n                self._route(\"steer\")\n                return\n",
+    "after": "                self._note(f\"codex notice steered into turn {turn} ({outcome.server})\")\n                self._route(\"steer\")\n",
     "tests": [
       "tests/test_codex_queue.py::test_a_busy_session_is_steered_into_its_turn_not_queued",
       "tests/test_codex_queue.py::test_a_refusal_is_steered_again_once_for_a_turn_that_moved"
@@ -3416,8 +3416,8 @@
   },
   "codexwake-unreached-steer-is-queued": {
     "file": "hardline_mcp/codex_queue.py",
-    "before": "                self._note(f\"codex steer unreached, queueing: {exc}\")\n                break\n",
-    "after": "                self._note(f\"codex steer unreached, queueing: {exc}\")\n                raise\n",
+    "before": "                why = f\"steer unreached: {exc}\"\n                break\n",
+    "after": "                why = f\"steer unreached: {exc}\"\n                raise\n",
     "tests": [
       "tests/test_codex_queue.py::test_an_unreached_steer_queues"
     ]
@@ -3572,6 +3572,127 @@
     "after": "    return _read_head()[1] or None\n",
     "tests": [
       "tests/test_server.py::test_a_server_says_when_its_checkout_has_moved"
+    ]
+  },
+  "route-steer-recorded": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "                self._route(\"steer\")\n                return",
+    "after": "                return",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_steered_notice_is_recorded_as_steered"
+    ]
+  },
+  "route-ambiguous-not-steered": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "                self._route(\"ambiguous\", f\"steer unconfirmed: {exc}\")  # may have landed",
+    "after": "                self._route(\"steer\")  # may have landed",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_steer_that_may_have_landed_is_not_claimed_as_steered"
+    ]
+  },
+  "route-queue-reason": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "        self._route(\"queue\", why)",
+    "after": "        self._route(\"queue\")",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_refused_steer_is_recorded_as_queued_with_the_refusal",
+      "tests/test_codex_route_facts.py::test_a_notice_with_no_turn_seen_says_so"
+    ]
+  },
+  "route-refusal-reason": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "            why = f\"steer refused: {outcome.detail}\"",
+    "after": "            why = \"steer refused\"",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_refused_steer_is_recorded_as_queued_with_the_refusal"
+    ]
+  },
+  "route-unreached-reason": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "                why = f\"steer unreached: {exc}\"",
+    "after": "                why = \"steer unreached\"",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_an_unreached_steer_is_recorded_with_why"
+    ]
+  },
+  "route-counts-accumulate": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "self.routes[counter] = self.routes.get(counter, 0) + 1",
+    "after": "self.routes[counter] = 1",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_the_counts_accumulate_and_the_last_route_is_the_latest"
+    ]
+  },
+  "route-columns-written": {
+    "file": "hardline_mcp/delivery.py",
+    "before": "(pid, process_key, *(routes.get(k) for k in ROUTE_KEYS))",
+    "after": "(pid, process_key, *(None for k in ROUTE_KEYS))",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_steered_notice_is_recorded_as_steered"
+    ]
+  },
+  "route-push-delivery-keeps-its-shape": {
+    "file": "hardline_mcp/mailbox.py",
+    "before": "    oldest_unreceipted_at  TEXT,\n    PRIMARY KEY (pid, process_key)",
+    "after": "    oldest_unreceipted_at  TEXT,\n    last_route             TEXT,\n    PRIMARY KEY (pid, process_key)",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_store_initialised_here_still_takes_an_older_revisions_positional_write"
+    ]
+  },
+  "route-write-independent-of-push-write": {
+    "file": "hardline_mcp/announce.py",
+    "before": "{what} not recorded: {type(exc).__name__}: {exc}\")",
+    "after": "{what} not recorded: {type(exc).__name__}: {exc}\")\n                return",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_failed_push_write_does_not_lose_the_route_write"
+    ]
+  },
+  "route-failed-write-retries-only-itself": {
+    "file": "hardline_mcp/announce.py",
+    "before": "                    setattr(self, flag, True)",
+    "after": "                    setattr(self, \"_dirty\", True)",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_failed_route_write_does_not_lose_the_push_write"
+    ]
+  },
+  "route-rows-pruned": {
+    "file": "hardline_mcp/delivery.py",
+    "before": "        for table in (\"push_delivery\", \"codex_routes\"):",
+    "after": "        for table in (\"push_delivery\",):",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_routes_of_a_dead_process_are_pruned"
+    ]
+  },
+  "writers-name-their-columns-process-revisions": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "\"INSERT OR REPLACE INTO process_revisions (pid, process_key, revision)\"\n                \" VALUES (?, ?, ?)\",",
+    "after": "\"INSERT OR REPLACE INTO process_revisions\"\n                \" VALUES (?, ?, ?)\",",
+    "tests": [
+      "tests/test_schema_writers.py::test_no_insert_relies_on_a_tables_column_order"
+    ]
+  },
+  "writers-name-their-columns-lane-hints": {
+    "file": "hardline_mcp/hints.py",
+    "before": "\"INSERT INTO lane_hints (recipient, conversation, writer, held_at) VALUES (?, ?, ?, ?)\",",
+    "after": "\"INSERT INTO lane_hints VALUES (?, ?, ?, ?)\",",
+    "tests": [
+      "tests/test_schema_writers.py::test_no_insert_relies_on_a_tables_column_order"
+    ]
+  },
+  "report-route-totals": {
+    "file": "hardline_mcp/report.py",
+    "before": "sum(r[k] or 0 for r in rows)",
+    "after": "0",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_report_shows_each_codex_process_route_and_totals"
+    ]
+  },
+  "report-route-rows-only-when-recorded": {
+    "file": "hardline_mcp/report.py",
+    "before": " FROM codex_routes WHERE last_route IS NOT NULL ORDER BY pid",
+    "after": " FROM codex_routes ORDER BY pid",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_report_shows_each_codex_process_route_and_totals"
     ]
   }
 }

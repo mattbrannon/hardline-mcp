@@ -46,6 +46,8 @@ NOTES = [
     "which a hand-sent copy can imitate",
     "tokenless: records with no creation token not shown dead, whose pid may be their own "
     "process or a stranger's; zero is this run's finding, not a guarantee",
+    "codex_routes: facts each Codex wake wrote about itself; 'ambiguous' is a steer that may or may "
+    "not have landed, counted apart from steered; a dead process's row stays until pruned",
     "unread_mail: counts only, nothing is acked or deleted; a registered holder is a session row "
     "not shown dead, not a consumer known to be reading",
 ]
@@ -67,8 +69,11 @@ _READS = {
     # because every writer stores UTC ISO-8601 (mailbox._iso of a UTC clock).
     "unread": "SELECT recipient, COUNT(*) AS n, MIN(created_at) AS oldest FROM messages"
     " WHERE acked_at IS NULL GROUP BY recipient",
+    "routes": "SELECT pid, process_key, last_route, last_route_reason, steered, queued, ambiguous"
+    " FROM codex_routes WHERE last_route IS NOT NULL ORDER BY pid",
 }
 _CREATED_ON_USE = {
+    "routes": "codex_routes",
     "revisions": "process_revisions",
     "legacy": "sessions",
     "acks": "message_acks",
@@ -93,6 +98,7 @@ def report(db_path: Optional[Path] = None) -> dict:
         "unread_mail": _section(
             functools.partial(_unread_mail, now=now), read, probe, "unread", "sessions"
         ),
+        "codex_routes": _section(_codex_routes, read, probe, "routes"),
         "notes": NOTES,
     }
 
@@ -242,6 +248,16 @@ def _tokenless(sessions: list, jobs: list, *, probe: Callable) -> dict:
             if j["child_pid"] and j["child_key"] is None and probe(j["child_pid"], None) != DEAD
             and probe(j["owner_pid"], j["owner_key"]) != DEAD
         ),
+    }
+
+
+def _codex_routes(routes: Optional[list], *, probe: Callable) -> dict:
+    """Which way each Codex wake sent its notices: steered into the turn,
+    queued (with the last reason), or ambiguous. Totals are over the rows shown."""
+    rows = [{**r, "state": probe(r["pid"], r["process_key"])} for r in routes or ()]
+    return {
+        **{k: sum(r[k] or 0 for r in rows) for k in ("steered", "queued", "ambiguous")},
+        "processes": rows,
     }
 
 

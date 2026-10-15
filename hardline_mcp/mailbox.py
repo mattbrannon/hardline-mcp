@@ -63,6 +63,23 @@ CREATE TABLE IF NOT EXISTS push_delivery (
 );
 """
 
+# Which way each Codex notice went (``codex_queue``), by the process that sent
+# it: its own totals, rewritten whole. A table of its own because older
+# revisions write ``push_delivery`` with positional values, which a column added
+# there would break in every one of them. Created on use too.
+CODEX_ROUTES_TABLE = """
+CREATE TABLE IF NOT EXISTS codex_routes (
+    pid               INTEGER NOT NULL,
+    process_key       TEXT NOT NULL,
+    last_route        TEXT,
+    last_route_reason TEXT,
+    steered           INTEGER,
+    queued            INTEGER,
+    ambiguous         INTEGER,
+    PRIMARY KEY (pid, process_key)
+);
+"""
+
 # Which conversation last held each claimed name: advice for that conversation
 # after a restart, never ownership (see ``hints``). Created on use too, like
 # push_delivery.
@@ -111,7 +128,11 @@ CREATE TABLE IF NOT EXISTS process_revisions (
 """
 
 _SCHEMA = (
-    PUSH_DELIVERY_TABLE + LANE_HINTS_TABLE + MESSAGE_ACKS_TABLE + PROCESS_REVISIONS_TABLE
+    PUSH_DELIVERY_TABLE
+    + CODEX_ROUTES_TABLE
+    + LANE_HINTS_TABLE
+    + MESSAGE_ACKS_TABLE
+    + PROCESS_REVISIONS_TABLE
 ) + """
 CREATE TABLE IF NOT EXISTS messages (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
