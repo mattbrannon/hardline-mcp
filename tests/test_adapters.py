@@ -2280,6 +2280,148 @@ def test_nonzero_exit_still_surfaces_the_agents_output(monkeypatch):
     assert out["raw_length"] > 0
 
 
+_CLAUDE_REFUSED = (
+    "Claude Code can't respond to this message with Fable 5.1. "
+    "Please change your model and try again."
+)
+
+
+def test_failed_claude_job_reports_the_error_its_stream_gave(monkeypatch):
+    """A nonzero exit used to surface only "exit 1: <11KB of stream-json>",
+    burying the result event's real reason. The parsed error must lead."""
+    stdout = _claude_stream(
+        {"type": "system", "subtype": "init", "model": "fable-5.1"},
+        {
+            "type": "assistant",
+            "message": {"model": "fable-5.1", "content": []},
+        },
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": True,
+            "result": _CLAUDE_REFUSED,
+        },
+    )
+    _capture_run(
+        monkeypatch, _FakeCompleted(stdout=stdout, stderr="", returncode=1)
+    )
+
+    out = adapters.ask_claude("review", model="fable-5.1")
+
+    assert out["ok"] is False
+    assert out["error"] == _CLAUDE_REFUSED
+    assert out["exit_code"] == 1
+    assert isinstance(out["elapsed_s"], float)
+    assert out["actual_model"] == "fable-5.1"
+
+
+def test_nonzero_exit_with_a_clean_result_is_still_a_failure(monkeypatch):
+    """A result event that is not an error must not turn a nonzero exit into
+    ok: True. The reply Claude produced is kept, but as partial_reply."""
+    stdout = _claude_stream(
+        {"type": "system", "subtype": "init", "model": "m"},
+        {"type": "result", "subtype": "success", "is_error": False, "result": "done"},
+    )
+    _capture_run(
+        monkeypatch, _FakeCompleted(stdout=stdout, stderr="late crash", returncode=3)
+    )
+
+    out = adapters.ask_claude("review", effort="high")
+
+    assert out["ok"] is False
+    assert "reply" not in out
+    assert out["partial_reply"] == "done"
+    assert out["exit_code"] == 3
+    assert "exit 3" in out["error"]
+
+
+def test_failed_claude_job_without_a_result_keeps_raw_evidence(monkeypatch):
+    _capture_run(
+        monkeypatch,
+        _FakeCompleted(
+            stdout="some unparseable but valuable output", stderr="boom", returncode=1
+        ),
+    )
+
+    out = adapters.ask_claude("review", effort="high")
+
+    assert out["ok"] is False
+    assert out["error"].startswith("exit 1")
+    assert "valuable output" in out["raw_excerpt"]
+    assert out["raw_length"] > 0
+
+
+@pytest.mark.parametrize("agent", ["claude", "codex"])
+def test_a_silent_failed_exit_does_not_quote_its_stream_in_the_error(monkeypatch, agent):
+    """With nothing on stderr, the error used to be "exit 1: <all of stdout>",
+    an unbounded copy of what raw_excerpt already carries, bounded."""
+    _capture_run(
+        monkeypatch,
+        _FakeCompleted(stdout="x" * 50_000, stderr="", returncode=1),
+    )
+
+    out = getattr(adapters, f"ask_{agent}")("review", effort="high")
+
+    assert out["ok"] is False
+    assert out["error"] == "exit 1"
+    assert out["raw_length"] == 50_000 and len(out["raw_excerpt"]) < 50_000
+
+
+def test_a_parsed_failure_keeps_the_process_error_beside_it(monkeypatch):
+    """The stream's reason leads, but the exit and stderr are facts of the run
+    that nothing else carries."""
+    stdout = _claude_stream(
+        {"type": "system", "subtype": "init", "model": "m"},
+        {"type": "result", "subtype": "success", "is_error": True, "result": _CLAUDE_REFUSED},
+    )
+    _capture_run(
+        monkeypatch, _FakeCompleted(stdout=stdout, stderr="only-on-stderr", returncode=1)
+    )
+
+    out = adapters.ask_claude("review", effort="high")
+
+    assert out["error"] == _CLAUDE_REFUSED
+    assert out.get("process_error") == "exit 1: only-on-stderr"
+    assert "reply" not in out, "an is_error result's reply is only its error again"
+
+
+def test_an_answer_already_failed_by_the_parser_is_partial_under_a_failed_run(
+    monkeypatch, tmp_path
+):
+    """Advisory mode fails a success it cannot attribute to the subscription
+    before the run's failure is looked at; its answer must still not read as
+    a reply."""
+    stdout = _claude_stream(
+        {"type": "system", "subtype": "init", "model": "claude-fable-5", "apiKeySource": "x"},
+        {"type": "result", "subtype": "success", "result": "the answer"},
+    )
+    _capture_run(monkeypatch, _FakeCompleted(stdout=stdout, stderr="", returncode=1))
+    monkeypatch.setattr(adapters.tempfile, "mkdtemp", lambda prefix: str(tmp_path))
+
+    out = adapters.ask_claude("review", model="fable", mode="advisory")
+
+    assert out["ok"] is False and "subscription" in out["error"].lower()
+    assert "reply" not in out and out.get("partial_reply") == "the answer"
+    assert out.get("process_error") == "exit 1"
+
+
+def test_a_parsed_failure_keeps_the_stdin_shortfall(monkeypatch):
+    """Input the child never fully took is a process fact: a parsed error
+    from the stream must not hide it."""
+    stdout = _claude_stream(
+        {"type": "system", "subtype": "init", "model": "m"},
+        {"type": "result", "subtype": "success", "is_error": True, "result": _CLAUDE_REFUSED},
+    )
+    _capture_run(monkeypatch, _FakeCompleted(stdout=stdout, stderr="", returncode=1))
+    shortfall = "the child closed its stdin after accepting 0 of 9 bytes (no error)"
+    monkeypatch.setattr(adapters, "_stdin_shortfall", lambda *_: shortfall)
+
+    out = adapters.ask_claude("review", effort="high")
+
+    assert out["error"] == _CLAUDE_REFUSED
+    assert out.get("stdin_shortfall") == shortfall
+
+
 def test_ask_unknown_agent_rejected(monkeypatch):
     calls = _capture_run(monkeypatch)
     out = adapters.ask("nobody", "hi")
