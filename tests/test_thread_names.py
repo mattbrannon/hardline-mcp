@@ -481,6 +481,32 @@ def test_an_explicit_claim_clears_an_origin_a_failed_publication_left(wake, stor
     assert adapters.claimed_lanes() == ("b", "a")
 
 
+class _FaultyOrigins(frozenset):
+    """Origins whose first cleanup fails: a fault inside ``claim_lane``."""
+
+    faults = [True]
+
+    def __sub__(self, other):
+        if self.faults and self.faults.pop():
+            raise MemoryError("injected origin-cleanup fault")
+        return frozenset(self) - other
+
+
+def test_a_claim_whose_origin_cleanup_fails_is_left_unclaimed_and_retried(wake, store):
+    """Two faults: a publication left A's origin behind, then clearing it during
+    an explicit claim of A failed. A must not be listed with that origin: the
+    claim fails whole, a retry claims it explicitly, and B lands below it."""
+    _FaultyOrigins.faults = [True]
+    adapters._restored = _FaultyOrigins({"a"})
+    with pytest.raises(MemoryError):
+        adapters.claim_lane("a")
+    assert adapters.claimed_lanes() == (), "listed with the stale origin"
+    assert adapters.claim_lane("a") is None
+    bind(store, "codex:b", 5)
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ("b", "a")
+
+
 def test_a_dead_launching_host_restores_nothing(wake, store, monkeypatch):
     bind(store, "codex:a", 1)
     monkeypatch.setattr(adapters, "host_identity", lambda: {"host_pid": GONE, "host_key": "gone"})
@@ -497,14 +523,19 @@ def test_a_store_without_the_table_says_so(wake, store):
 
 
 class _WatchedLock:
-    """``server._identity_lock``, telling the test when the claimer asks for it."""
+    """``server._identity_lock``, recording how the claimer got it: ``blocked``
+    (held by someone else, so it waits) or ``acquired`` (free at once)."""
 
-    def __init__(self, inner, asked):
-        self.inner, self.asked = inner, asked
+    def __init__(self, inner, record):
+        self.inner, self.record = inner, record
 
     def acquire(self, *a, **k):
-        if threading.current_thread().name == "claimer":
-            self.asked.set()
+        if threading.current_thread().name != "claimer":
+            return self.inner.acquire(*a, **k)
+        if self.inner.acquire(blocking=False):
+            self.record("acquired")
+            return True
+        self.record("blocked")
         return self.inner.acquire(*a, **k)
 
     def release(self):
@@ -526,24 +557,28 @@ def test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job(
     wake, store, monkeypatch, path
 ):
     """The dispatch holds the identity lock from its recipient to its job. A
-    claim reaching publication meanwhile asks for the lock and waits for it:
-    the job is created, at the recipient chosen, before the claim publishes."""
-    asked, in_job, published = (threading.Event() for _ in range(3))
-    events = []
-    monkeypatch.setattr(server, "_identity_lock", _WatchedLock(server._identity_lock, asked))
+    claim reaching publication meanwhile is BLOCKED on that lock - not let
+    through, not publishing without it - whatever the schedule: the dispatch
+    waits for the claimer's first decisive step, which is one of those three."""
+    in_job, decisive = threading.Event(), threading.Event()
+    claimer_steps, events = [], []
+
+    def record(step):
+        claimer_steps.append(step)
+        decisive.set()
+
+    monkeypatch.setattr(server, "_identity_lock", _WatchedLock(server._identity_lock, record))
     create, claim_lane = jobs.create, adapters.claim_lane
 
     def creating(**kw):
         in_job.set()
-        asked.wait(10)  # the claimer has asked for the lock (or never will)
-        # Held, it cannot publish; not held, it does so at once: give it the chance.
-        published.wait(1.0)
+        assert decisive.wait(30), "the claimer never reached the lock or publication"
         events.append(("job", kw["requester"]))
         return create(**kw)
 
     def claiming(label):
+        record("published")
         events.append(("claim", label))
-        published.set()
         return claim_lane(label)
 
     monkeypatch.setattr(jobs, "create", creating)
@@ -563,6 +598,7 @@ def test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job(
     claimer.start()
     dispatcher.join(30)
     claimer.join(30)
+    assert claimer_steps[:1] == ["blocked"], claimer_steps
     assert dispatched.get("accepted") is True, dispatched
     assert events == [("job", dispatched["lane"]), ("claim", "r")], events
     assert dispatched["lane"] != "codex:r"

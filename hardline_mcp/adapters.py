@@ -846,10 +846,12 @@ def claim_lane(label: str) -> Optional[str]:
         refused = _capacity_refusal(label)
         if refused:
             return refused
-        _claimed_lanes.append(label)
         # A new entry is an explicit claim, whatever origin a restoration that
         # failed part way left recorded for the name (``publish_restoration``).
+        # Cleared before the append: a failure here leaves the name unlisted,
+        # and the claim is simply retried.
         _restored = _restored - {label}
+        _claimed_lanes.append(label)
         _pending_claims.pop(label, None)
     return None
 
