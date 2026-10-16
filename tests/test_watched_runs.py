@@ -157,6 +157,55 @@ def test_a_pipe_is_drained_before_it_is_closed(monkeypatch):
     assert "tail" in out.get("partial_stdout", {}).get("raw_excerpt", ""), out
 
 
+import subprocess
+
+from test_adapters import _capture_run, _claude_stream, _codex_stream
+
+
+def _stopped_after(stdout: str, cmd: str) -> subprocess.TimeoutExpired:
+    """What the watch raises for a run that went silent: everything it wrote."""
+    exc = adapters._Silent(cmd, 14400, output=stdout, stderr="")
+    exc.reaped, exc.capture_complete = True, True
+    return exc
+
+
+def test_a_codex_turn_that_completed_before_the_stop_is_the_answer(monkeypatch):
+    stdout = _codex_stream(
+        {"type": "thread.started", "thread_id": "t1"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "the review"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 10}},
+    )
+    _capture_run(monkeypatch, exc=_stopped_after(stdout, "codex"))
+    out = adapters.ask_codex("review", effort="high")
+    assert out.get("ok") is True and out.get("reply") == "the review", out
+    assert "did not exit" in out.get("process_exit", "")
+    assert out.get("timeout_kind") == "idle"
+
+
+def test_a_codex_turn_cut_off_mid_answer_is_still_a_failure(monkeypatch):
+    stdout = _codex_stream(
+        {"type": "thread.started", "thread_id": "t1"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "half"}},
+    )
+    _capture_run(monkeypatch, exc=_stopped_after(stdout, "codex"))
+    out = adapters.ask_codex("review", effort="high")
+    assert out.get("ok") is False and out.get("timed_out") is True, out
+    assert "process_exit" not in out, "an unfinished turn read as finished"
+
+
+def test_a_claude_result_that_came_before_the_stop_is_the_answer(monkeypatch):
+    stdout = _claude_stream(
+        {"type": "system", "subtype": "init", "model": "claude-fable-5", "apiKeySource": "none"},
+        {"type": "result", "subtype": "success", "result": "the answer",
+         "usage": {"input_tokens": 2, "output_tokens": 1},
+         "modelUsage": {"claude-fable-5": {"inputTokens": 2, "outputTokens": 1}}},
+    )
+    _capture_run(monkeypatch, exc=_stopped_after(stdout, "claude"))
+    out = adapters.ask_claude("go", effort="high")
+    assert out.get("ok") is True and out.get("reply") == "the answer", out
+    assert "did not exit" in out.get("process_exit", "")
+
+
 @pytest.mark.parametrize("streaming", [False, True])
 def test_only_a_streaming_agent_run_is_watched(monkeypatch, streaming):
     for name in ("HARDLINE_CLAUDE_TIMEOUT_S", "HARDLINE_CLAUDE_IDLE_S"):

@@ -1405,6 +1405,10 @@ def _run_cmd(
             response["child_reaped"] = False
         if partial_out:
             response["partial_stdout"] = _raw_evidence(partial_out)
+            if capture_failed_output:
+                # Whole, for the structured parsers: a turn can finish and the
+                # process still never exit, and its answer is all here.
+                response["_stdout"] = partial_out.strip()
         if partial_err:
             response["partial_stderr"] = _raw_evidence(partial_err)
         return tagged(response)
@@ -3049,6 +3053,10 @@ def _ask_codex_structured(
             # with the exit code and timing the process reported.
             if not parsed.get("ok") and "thread_id" in parsed:
                 return _carry_process_telemetry(parsed, run)
+            # The turn completed and the process then never exited, until a
+            # limit stopped it: the answer is whole, so it is the result.
+            if parsed.get("ok") and run.get("timed_out"):
+                return _completed_before_the_stop(parsed, run)
             # Otherwise the excerpt was computed and then thrown away, so a
             # nonzero exit surfaced only "exit 1: ..." and the agent's actual
             # output vanished - the same unrecoverable-failure shape this
@@ -3072,6 +3080,21 @@ def _ask_codex_structured(
 # "how long did that take / what budget was it under / how did it exit" became
 # unanswerable on exactly the calls slow or broken enough for anyone to ask.
 _PROCESS_TELEMETRY = ("elapsed_s", "timeout_s", "exit_code", "stdin_shortfall")
+
+
+def _completed_before_the_stop(parsed: dict, run: dict) -> dict:
+    """A run stopped by a limit after its turn had completed: the parsed
+    answer, ok, saying the process had to be stopped. Seen 2026-10-16: a
+    Codex review emitted turn.completed, then wrote nothing and never exited
+    until the idle limit, an hour later; its answer had been thrown away."""
+    parsed = _carry_process_telemetry(parsed, run)
+    parsed["process_exit"] = (
+        f"stopped after the turn completed: the process did not exit ({run.get('error')})"
+    )
+    for key in ("timed_out", "timeout_kind", "idle_s"):
+        if key in run:
+            parsed.setdefault(key, run[key])
+    return parsed
 
 
 def _carry_process_telemetry(parsed: dict, run: dict) -> dict:
@@ -3620,6 +3643,8 @@ def _ask_claude_structured(
                 requested_effort=effort,
                 require_base_subscription=mode == "advisory",
             )
+            if parsed.get("ok") and run.get("timed_out"):
+                return _completed_before_the_stop(parsed, run)  # as Codex's twin
             if "usage" in parsed:
                 # The run failed whatever the stream says. An answer it holds
                 # is partial - an is_error result's "reply" is only its error.

@@ -274,6 +274,8 @@ idle limit and keeps the 900-second ceiling. A fixed 900 seconds had killed a
 healthy review that had written a megabyte of events, while a wedged run sat
 out its whole budget.
 
+A run whose turn had already completed before a limit stopped it returns its answer (`ok: true`), with `process_exit` saying the process had to be stopped. On 2026-10-16 a Codex review emitted `turn.completed`, then never exited, and was stopped an hour later.
+
 Silence is a policy, not proof of a hang. Codex's `--json` stream carries
 completed items, not reasoning or command-output deltas, and Claude's carries
 whole messages, so a long tool call or a long stretch of reasoning writes
