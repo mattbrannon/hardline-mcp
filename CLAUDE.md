@@ -78,6 +78,13 @@ Dependencies point one way: `procid` <- `mailbox` <- `jobs`/`sessions` <-
   (`lane_hints`), so a relaunched or reconnected conversation is told about
   its old names and their mail. Advice only: it never claims, routes or reads.
   See `docs/session-continuity.md`.
+- `bindings.py` records which Codex thread each claimed name belongs to
+  (`thread_names`), written only by attributed claims, restorations, releases
+  and dismissals. A Codex server's wake poll claims its thread's names back
+  through the ordinary ownership rule (`sessions.survey`/`sessions.restore`,
+  `server._restore_pending`), and async admission refuses a result addressed to
+  the parent-derived lane while the thread has names the server does not hold.
+  See "A Codex thread's names" in `docs/session-continuity.md`.
 - `report.py` audits a store read-only (`mode=ro`, one snapshot, never
   `mailbox._connect`): which revisions the registered servers run (recorded
   in `process_revisions`, keyed by process identity), whether the legacy

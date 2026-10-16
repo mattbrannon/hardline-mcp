@@ -51,7 +51,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Callable, NamedTuple, Optional
+from typing import Callable, Iterable, NamedTuple, Optional
 
 from . import github_context, mailbox, procid
 
@@ -790,7 +790,21 @@ MAX_CLAIMED_LANES = 32
 # through the ordinary ownership rule once the holder is dead. Process-local
 # like ``_claimed_lanes``, so a waiting claim ends with the process that made
 # it and no other process, revision or later session can inherit it.
-_pending_claims: dict[str, str] = {}
+class Pending(NamedTuple):
+    """One waiting claim: the agent it is for, and the Codex thread its request
+    was attributed to (None if none), so a fulfilment binds as the request
+    would have. A replaced claim is a new object, told apart by identity."""
+
+    agent: str
+    thread: Optional[str] = None
+
+
+_pending_claims: dict[str, Pending] = {}
+
+# Claims of restored origin (bindings, ``publish_restoration``): the claim list
+# is the restored run, oldest durable place first, then the explicit run. A
+# frozenset, only ever rebound whole, so no reader or failure sees it half made.
+_restored: frozenset[str] = frozenset()
 
 
 def _capacity_refusal(label: str) -> Optional[str]:
@@ -823,6 +837,7 @@ def claim_lane(label: str) -> Optional[str]:
     The previous lane is NOT surrendered - see ``held_lanes``. A pending claim
     for the same name is settled by this adoption.
     """
+    global _restored
     label = label.strip()
     with _claim_lock:
         if label in _claimed_lanes:
@@ -831,12 +846,17 @@ def claim_lane(label: str) -> Optional[str]:
         refused = _capacity_refusal(label)
         if refused:
             return refused
+        # A new entry is an explicit claim, whatever origin a restoration that
+        # failed part way left recorded for the name (``publish_restoration``).
+        # Cleared before the append: a failure here leaves the name unlisted,
+        # and the claim is simply retried.
+        _restored = _restored - {label}
         _claimed_lanes.append(label)
         _pending_claims.pop(label, None)
     return None
 
 
-def await_lane(label: str, agent: str) -> Optional[str]:
+def await_lane(label: str, agent: str, thread: Optional[str] = None) -> Optional[str]:
     """Wait for ``label`` until its holder is gone. None on success, else why not."""
     label = label.strip()
     with _claim_lock:
@@ -845,12 +865,18 @@ def await_lane(label: str, agent: str) -> Optional[str]:
         refused = _capacity_refusal(label)
         if refused:
             return refused
-        _pending_claims[label] = agent
+        _pending_claims[label] = Pending(agent, thread)
     return None
 
 
 def pending_claims() -> dict[str, str]:
     """Names this process is waiting for, label -> agent, oldest first."""
+    with _claim_lock:
+        return {label: record.agent for label, record in _pending_claims.items()}
+
+
+def pending_records() -> dict[str, Pending]:
+    """Names this process is waiting for, label -> its ``Pending`` record."""
     with _claim_lock:
         return dict(_pending_claims)
 
@@ -867,9 +893,90 @@ def release_lane(label: str) -> None:
     Only touches runtime claims. A lane derived from the environment is not a
     claim and cannot be surrendered - it is what this process is.
     """
+    global _restored
     with _claim_lock:
         if label in _claimed_lanes:
             _claimed_lanes.remove(label)
+        _restored = _restored - {label}
+
+
+def claimed_lanes() -> tuple[str, ...]:
+    """This process's claims, in list order (restored run, then explicit)."""
+    with _claim_lock:
+        return tuple(_claimed_lanes)
+
+
+def free_slots() -> int:
+    """How many more names this process may hold or await."""
+    with _claim_lock:
+        return MAX_CLAIMED_LANES - len(set(_claimed_lanes) | set(_pending_claims))
+
+
+def _with_restored(
+    claims: list[str], restored: set[str], labels: Iterable[str], order: list[tuple[str, int]]
+) -> tuple[list[str], set[str]]:
+    """``claims`` with ``labels`` inserted as restored entries.
+
+    ``order`` is this process's bindings ``(label, seq)``, read in the restoring
+    transaction. Each label, in ascending seq, goes before the first restored
+    entry with a greater seq (entries absent from ``order`` are skipped), else
+    before the first explicit entry, else last. A label already listed stays
+    where it is, with its origin: adopting it is only a writer transfer.
+    """
+    seqs = dict(order)
+    claims, restored = list(claims), set(restored)
+    for label in sorted((l for l in labels if l not in claims), key=lambda l: seqs.get(l, 0)):
+        seq = seqs.get(label, 0)
+        at = next(
+            (
+                i for i, entry in enumerate(claims)
+                if (entry in restored and entry in seqs and seqs[entry] > seq)
+                or entry not in restored
+            ),
+            len(claims),
+        )
+        claims.insert(at, label)
+        restored.add(label)
+    return claims, restored
+
+
+class Restoration(NamedTuple):
+    """The claim list a restoration will leave, prepared before its commit."""
+
+    held: tuple[str, ...]  # held_lanes() afterwards: the order the registry is written in
+    claims: list[str]
+    restored: set[str]
+
+
+def prepare_restoration(labels: Iterable[str], order: list[tuple[str, int]]) -> Restoration:
+    """What adopting restored ``labels`` will leave (``_with_restored``), without
+    changing anything. The caller holds the claim mutex every claim and release
+    also holds, so it is still true when ``publish_restoration`` applies it."""
+    with _claim_lock:
+        claims, restored = _with_restored(_claimed_lanes, _restored, labels, order)
+    return Restoration(_ordered(derived_lane_suffix(), claims), claims, restored)
+
+
+def publish_restoration(prepared: Restoration) -> None:
+    """Apply a prepared restoration. No capacity check: the restoring
+    transaction spent the slots.
+
+    Origins first, each a whole rebinding: an origin for a name not yet listed
+    is inert - ``claim_lane`` clears it if the name is claimed explicitly
+    first - so a failure before the list is replaced leaves the new names
+    simply unlisted, which the next attempt finds unheld and adopts again
+    (``sessions.survey``). The reverse order could leave them listed without
+    their origin - read as explicit claims, and never repaired."""
+    global _restored
+    with _claim_lock:
+        _restored = frozenset(prepared.restored)
+        _claimed_lanes[:] = prepared.claims
+
+
+def qualify(agent: str, labels: Iterable[str]) -> tuple[str, ...]:
+    """Labels as recipients of ``agent``: the one conversion between the two."""
+    base = base_agent(agent)
+    return tuple(f"{base}:{label}" for label in labels)
 
 
 def claim_refusal(label: str) -> Optional[str]:
@@ -926,9 +1033,11 @@ def declare_agent(agent: str) -> None:
 def reset_claimed_lanes() -> None:
     """Forget every runtime claim and declaration. For tests; process-local
     state must not leak between them the way an env var cannot."""
+    global _restored
     with _claim_lock:
         _claimed_lanes.clear()
         _pending_claims.clear()
+        _restored = frozenset()
         _declared_agent.clear()
 
 
@@ -959,11 +1068,15 @@ def held_lanes() -> tuple[str, ...]:
     last lane is always the one ``lane_suffix`` answers to - the order the
     registry is written in.
     """
-    derived = derived_lane_suffix()
     with _claim_lock:
         claims = list(_claimed_lanes)  # unique: claim_lane never repeats one
+    return _ordered(derived_lane_suffix(), claims)
+
+
+def _ordered(derived: str, claims: list[str]) -> tuple[str, ...]:
+    """The derived lane first unless it is itself a claim, then the claims."""
     lanes = [derived] if derived and derived not in claims else []
-    return tuple(lanes + claims)
+    return tuple(lanes + list(claims))
 
 
 def recipients_before_claim(agent: str, label: str) -> tuple[str, ...]:

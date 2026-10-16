@@ -60,6 +60,12 @@ still queued to the pinned thread. Until the pin
 there is nothing to wake: absence is not evidence. A caller that omits
 `thread_source` (some app-server clients may) is never armed.
 
+The pinned thread is also what this session's claimed names are bound to, and
+what its next server restores them for: the first poll after the pin runs the
+wake's fulfil at once (`_last_fulfil` reset), and a conflict stops restoration
+as it stops notices. See "A Codex thread's names" in
+[session-continuity.md](session-continuity.md).
+
 ### The notice: constant text and a nonce
 
 A queued message carries the user's authority and renders as typed input, so

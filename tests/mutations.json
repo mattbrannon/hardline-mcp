@@ -147,8 +147,8 @@
   },
   "held-lanes-a-claimed-derived-name-takes-its-claim-place": {
     "file": "hardline_mcp/adapters.py",
-    "before": "    return tuple(lanes + claims)\n",
-    "after": "    return tuple(dict.fromkeys(([derived] if derived else []) + claims))\n",
+    "before": "    lanes = [derived] if derived and derived not in claims else []\n    return tuple(lanes + list(claims))\n",
+    "after": "    return tuple(dict.fromkeys(([derived] if derived else []) + list(claims)))\n",
     "tests": [
       "tests/test_sessions.py::test_claiming_the_derived_name_makes_it_the_advertised_one"
     ]
@@ -275,8 +275,8 @@
   },
   "lane-acquisition-lock": {
     "file": "hardline_mcp/sessions.py",
-    "before": "            conn.execute(\"BEGIN IMMEDIATE\")\n",
-    "after": "",
+    "before": "        with conn:\n            conn.execute(\"BEGIN IMMEDIATE\")\n            for lane in requested:\n",
+    "after": "        with conn:\n            for lane in requested:\n",
     "tests": [
       "tests/test_ownership.py::test_acquisition_serializes_check_and_write"
     ]
@@ -758,8 +758,8 @@
   },
   "pending-claim-obeys-ownership-rule": {
     "file": "hardline_mcp/server.py",
-    "before": "            result = _register_locked(label, agent, wait=False)\n",
-    "after": "            result = {\"ok\": adapters.claim_lane(label) is None, \"lane\": f\"{agent}:{label}\"}\n",
+    "before": "            result = _register_locked(label, record.agent, wait=False, thread=record.thread)\n",
+    "after": "            result = {\"ok\": adapters.claim_lane(label) is None, \"lane\": f\"{record.agent}:{label}\"}\n",
     "tests": [
       "tests/test_continuity.py::test_a_waiting_claim_is_never_granted_while_the_holder_lives"
     ]
@@ -774,8 +774,8 @@
   },
   "pending-claim-release-cancels": {
     "file": "hardline_mcp/server.py",
-    "before": "    if waited_as is not None:\n        adapters.cancel_pending(label)\n",
-    "after": "    if waited_as is not None:\n        pass\n",
+    "before": "        adapters.cancel_pending(label)\n        with _identity_lock:\n",
+    "after": "        with _identity_lock:\n",
     "tests": [
       "tests/test_continuity.py::test_release_cancels_a_waiting_claim"
     ]
@@ -1755,8 +1755,8 @@
   },
   "codexwake-thread-agrees-with-turn-metadata": {
     "file": "hardline_mcp/codex_queue.py",
-    "before": "        if thread is None or turn.get(\"thread_id\") not in (None, thread):",
-    "after": "        if thread is None:",
+    "before": "    if thread is None or turn.get(\"thread_id\") not in (None, thread):\n",
+    "after": "    if thread is None:\n",
     "tests": [
       "tests/test_codex_queue.py::test_a_thread_id_that_disagrees_with_its_turn_metadata_is_ignored"
     ]
@@ -2144,8 +2144,8 @@
   },
   "take-back-writes-its-facts-now": {
     "file": "hardline_mcp/announce.py",
-    "before": "            self._dirty = True\n        self._flush()\n\n    # ── the loop",
-    "after": "            self._dirty = True\n\n    # ── the loop",
+    "before": "            self._dirty = True\n        self._flush()\n\n    # \u2500\u2500 the loop",
+    "after": "            self._dirty = True\n\n    # \u2500\u2500 the loop",
     "tests": [
       "tests/test_claude_inbox.py::test_a_notice_taken_back_is_no_push_and_its_mail_is_due_again"
     ]
@@ -2394,8 +2394,8 @@
   },
   "regain-retries-the-own-registration": {
     "file": "hardline_mcp/server.py",
-    "before": "    if _registration_failure:\n        _announce_self()\n    return _fulfil_pending()\n",
-    "after": "    return _fulfil_pending()\n",
+    "before": "    if _registration_failure:\n        _stage(_announce_self)\n",
+    "after": "",
     "tests": [
       "tests/test_channel.py::test_an_idle_session_refused_its_own_lane_takes_it_when_the_holder_exits"
     ]
@@ -2474,8 +2474,8 @@
   },
   "hint-dismissed-by-release": {
     "file": "hardline_mcp/server.py",
-    "before": "        if agent and _forget(f\"{agent}:{label}\", own_grant=False):\n",
-    "after": "        if False:\n",
+    "before": "        forgotten = bool(agent) and _forget(f\"{agent}:{label}\", own_grant=False)\n",
+    "after": "        forgotten = False\n",
     "tests": [
       "tests/test_hints.py::test_a_hint_not_wanted_is_forgotten_by_release"
     ]
@@ -2871,8 +2871,8 @@
   },
   "register-claims-wait-outside-the-worker-pool": {
     "file": "hardline_mcp/server.py",
-    "before": "        _register_session_impl, label, agent, wait, limiter=_REGISTER_LIMITER\n",
-    "after": "        _register_session_impl, label, agent, wait\n",
+    "before": "        _register_session_impl, label, agent, wait, thread, limiter=_REGISTER_LIMITER\n",
+    "after": "        _register_session_impl, label, agent, wait, thread\n",
     "tests": [
       "tests/test_sessions.py::test_register_session_does_not_hold_a_shared_worker_slot"
     ]
@@ -3121,8 +3121,8 @@
   },
   "the-wake-cycle-pays-debts": {
     "file": "hardline_mcp/server.py",
-    "before": "    _settle_debts()\n    if _registration_failure:\n",
-    "after": "    if _registration_failure:\n",
+    "before": "    _stage(_settle_debts)\n",
+    "after": "",
     "tests": [
       "tests/test_server.py::test_an_idle_session_pays_its_debts_on_its_wake_cycle"
     ]
@@ -4056,6 +4056,400 @@
     "after": "    result = await _in_thread(\n        adapters.ask_codex,",
     "tests": [
       "tests/test_sync_agent.py::test_ask_claude_runs_through_the_cancellable_helper"
+    ]
+  },
+  "names-bound-when-attributed": {
+    "file": "hardline_mcp/server.py",
+    "before": "        return (\"bind\", thread), None\n",
+    "after": "        return \"unbind\", None\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_from_the_pinned_thread_is_bound_to_it"
+    ]
+  },
+  "names-unattributed-claim-unbinds": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                if binding == \"unbind\" or key is None:\n                    bindings.unbind_lane(conn, primary)\n",
+    "after": "                if binding == \"unbind\" or key is None:\n                    pass\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_not_from_the_pinned_thread_unbinds_the_name"
+    ]
+  },
+  "names-only-codex-bound": {
+    "file": "hardline_mcp/server.py",
+    "before": "    elif agent != \"codex\":\n",
+    "after": "    elif False:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_for_another_agent_is_never_bound"
+    ]
+  },
+  "names-claim-renumbers": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                    bindings.renumber(conn, thread=thread, pid=pid, key=key, order=requested)\n",
+    "after": "",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_from_the_pinned_thread_is_bound_to_it"
+    ]
+  },
+  "names-automatic-grant-never-binds": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "        atomic=False,\n        ranked=ranked,\n    )\n",
+    "after": "        atomic=False,\n        ranked=ranked,\n        binding=\"unbind\",\n    )\n",
+    "tests": [
+      "tests/test_thread_names.py::test_an_automatic_grant_leaves_a_binding_alone"
+    ]
+  },
+  "names-release-withdraws-the-pinned-thread": {
+    "file": "hardline_mcp/bindings.py",
+    "before": "        \" AND ((pid = ? AND process_key IS ?) OR (? IS NOT NULL AND thread = ?))\",\n        (lane, pid, key, thread, thread),\n",
+    "after": "        \" AND pid = ? AND process_key IS ?\",\n        (lane, pid, key),\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_release_withdraws_the_pinned_threads_binding_whoever_wrote_it"
+    ]
+  },
+  "names-release-keeps-another-threads": {
+    "file": "hardline_mcp/bindings.py",
+    "before": "        \" AND ((pid = ? AND process_key IS ?) OR (? IS NOT NULL AND thread = ?))\",\n        (lane, pid, key, thread, thread),\n",
+    "after": "        \" AND (? OR ? OR ? OR ? OR 1)\",\n        (lane, pid, key, thread, thread),\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_release_leaves_another_threads_binding_by_another_writer"
+    ]
+  },
+  "names-release-durable-first": {
+    "file": "hardline_mcp/server.py",
+    "before": "        if lane:\n            sessions.drop_lane(lane, thread=_pinned_thread())\n        adapters.release_lane(label)\n",
+    "after": "        adapters.release_lane(label)\n        if lane:\n            sessions.drop_lane(lane, thread=_pinned_thread())\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_release_that_fails_durably_keeps_the_name"
+    ]
+  },
+  "names-dismissal-unbinds": {
+    "file": "hardline_mcp/server.py",
+    "before": "        unbound = bool(thread and lane) and bindings.unbind(lane, thread)\n",
+    "after": "        unbound = False\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_dismissal_of_an_unheld_name_unbinds_it_and_says_so"
+    ]
+  },
+  "names-derived-release-withdraws": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "            bindings.withdraw(conn, lane=lane, pid=pid, key=key, thread=thread)\n            rerank(conn, pid=pid, key=key, order=order)\n",
+    "after": "            rerank(conn, pid=pid, key=key, order=order)\n",
+    "tests": [
+      "tests/test_thread_names.py::test_releasing_a_claimed_derived_name_keeps_the_lane_at_its_place"
+    ]
+  },
+  "names-restore-adopts-locally": {
+    "file": "hardline_mcp/server.py",
+    "before": "                adapters.publish_restoration(prepared[0])\n",
+    "after": "                pass\n",
+    "tests": [
+      "tests/test_thread_names.py::test_the_threads_names_come_back_in_their_order"
+    ]
+  },
+  "names-restore-reranks": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "            rerank(conn, pid=pid, key=key, order=final)\n",
+    "after": "",
+    "tests": [
+      "tests/test_thread_names.py::test_the_threads_names_come_back_in_their_order"
+    ]
+  },
+  "names-restore-rechecks-the-writer": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "        state = probe(c[\"pid\"], c[\"process_key\"])\n        if state != DEAD:\n",
+    "after": "        state = probe(c[\"pid\"], c[\"process_key\"])\n        if False:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_the_write_phase_rechecks_the_writer_itself"
+    ]
+  },
+  "names-restore-rechecks-ownership": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "    refusal = _refusal(conn, c[\"lane\"], pid, probe)  # adopt too: held is not granted\n",
+    "after": "    refusal = None\n",
+    "tests": [
+      "tests/test_thread_names.py::test_the_write_phase_rechecks_the_ownership_rule"
+    ]
+  },
+  "names-restore-admits-once-before-writing": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "            if attribution(thread) != thread:\n",
+    "after": "            if False:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_stop_between_survey_and_write_commits_nothing"
+    ]
+  },
+  "names-restore-rereads-the-binding": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "    if row is None or tuple(row) != snapshot:\n",
+    "after": "    if row is None:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_changed_candidate_is_skipped_and_the_next_one_restored"
+    ]
+  },
+  "names-restore-spends-only-on-acceptance": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                conn.execute(\"SAVEPOINT candidate\")\n",
+    "after": "                free -= 1\n                conn.execute(\"SAVEPOINT candidate\")\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_changed_candidate_is_skipped_and_the_next_one_restored"
+    ]
+  },
+  "names-restore-adopting-costs-nothing": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                if c[\"new\"] and free <= 0:\n",
+    "after": "                if free <= 0:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_full_session_still_adopts_a_name_it_already_holds"
+    ]
+  },
+  "names-regain-stages-isolated": {
+    "file": "hardline_mcp/server.py",
+    "before": "    granted = _stage(_fulfil_pending, fallback=[])\n",
+    "after": "    granted = _fulfil_pending()\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_failing_stage_does_not_starve_restoration"
+    ]
+  },
+  "names-first-poll-after-pin": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "                self._last_fulfil = None\n",
+    "after": "",
+    "tests": [
+      "tests/test_thread_names.py::test_the_first_poll_after_the_pin_restores"
+    ]
+  },
+  "names-order-restored-below-explicit": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "                or entry not in restored\n",
+    "after": "                or False\n",
+    "tests": [
+      "tests/test_thread_names.py::test_restored_names_go_in_by_durable_place_below_explicit_ones"
+    ]
+  },
+  "names-order-listed-entry-stays": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "    for label in sorted((l for l in labels if l not in claims), key=lambda l: seqs.get(l, 0)):\n",
+    "after": "    for label in sorted(labels, key=lambda l: seqs.get(l, 0)):\n",
+    "tests": [
+      "tests/test_thread_names.py::test_restored_names_go_in_by_durable_place_below_explicit_ones"
+    ]
+  },
+  "names-attribution-needs-a-top-level-thread": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "    if parsed is None or parsed[1].get(\"thread_source\") != \"user\":\n",
+    "after": "    if parsed is None:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_request_is_attributed_only_to_its_own_top_level_thread"
+    ]
+  },
+  "names-admission-refuses-on-unheld": {
+    "file": "hardline_mcp/server.py",
+    "before": "        unheld = bindings.unheld(thread, f\"{local}:\", adapters.owned_recipients(local))\n",
+    "after": "        unheld = []\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_dispatch_is_refused_while_the_threads_names_are_unheld"
+    ]
+  },
+  "names-admission-held-claim-dispatches": {
+    "file": "hardline_mcp/server.py",
+    "before": "    if adapters.claimed_lanes() or adapters.reproducible_lane_suffix():\n        return None, None\n",
+    "after": "    if False:\n        return None, None\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_held_claim_dispatches_despite_an_unheld_name"
+    ]
+  },
+  "names-admission-unpinned-never-asks": {
+    "file": "hardline_mcp/server.py",
+    "before": "    thread = _pinned_thread()\n    if thread is None:\n        return None, None\n",
+    "after": "    thread = _pinned_thread()\n",
+    "tests": [
+      "tests/test_thread_names.py::test_an_unpinned_server_never_asks"
+    ]
+  },
+  "names-admission-from-agent-must-match": {
+    "file": "hardline_mcp/server.py",
+    "before": "    if adapters.base_agent(from_agent) != local:\n",
+    "after": "    if False:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_from_agent_that_is_not_this_session_is_refused"
+    ]
+  },
+  "names-claim-publishes-under-identity-lock": {
+    "file": "hardline_mcp/server.py",
+    "before": "    with _identity_lock:\n        refused = adapters.claim_lane(label)\n",
+    "after": "    with contextlib.nullcontext():\n        refused = adapters.claim_lane(label)\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job",
+      "tests/test_thread_names.py::test_claims_and_jobs_publish_under_the_identity_lock"
+    ]
+  },
+  "names-job-created-under-identity-lock": {
+    "file": "hardline_mcp/server.py",
+    "before": "        with _identity_lock:\n            # Deliver back to THIS session's lane",
+    "after": "        with contextlib.nullcontext():\n            # Deliver back to THIS session's lane",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job",
+      "tests/test_thread_names.py::test_claims_and_jobs_publish_under_the_identity_lock"
+    ]
+  },
+  "names-adopt-checks-ownership-in-the-write": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "    refusal = _refusal(conn, c[\"lane\"], pid, probe)  # adopt too: held is not granted\n",
+    "after": "    refusal = None if c[\"kind\"] == \"adopt\" else _refusal(conn, c[\"lane\"], pid, probe)\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_held_but_contested_name_is_not_adopted"
+    ]
+  },
+  "names-adopt-checks-ownership-in-the-survey": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "            elif refusal := _refusal(conn, lane, pid, probe):\n",
+    "after": "            elif lane not in held and (refusal := _refusal(conn, lane, pid, probe)):\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_held_but_contested_name_is_not_adopted"
+    ]
+  },
+  "names-adopt-acquires-the-grant": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                if reason is None:\n                    if not accepted and key is not None:\n",
+    "after": "                if reason is None and c[\"kind\"] == \"acquire\":\n                    if not accepted and key is not None:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_adopting_a_held_name_takes_its_registry_grant_too"
+    ]
+  },
+  "names-restore-renumbers": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "            bindings.renumber(conn, thread=thread, pid=pid, key=key, order=final)\n",
+    "after": "",
+    "tests": [
+      "tests/test_thread_names.py::test_the_order_restored_is_the_order_the_next_server_restores"
+    ]
+  },
+  "names-own-unlisted-derived-repaired": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "            elif mine and lane in listed:\n",
+    "after": "            elif mine and lane in held:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_this_processs_unlisted_derived_binding_is_adopted"
+    ]
+  },
+  "names-own-unheld-repaired": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "            elif mine and lane in listed:\n",
+    "after": "            elif mine:\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_restoration_whose_local_half_was_lost_is_repaired"
+    ]
+  },
+  "names-restore-rolls-back-a-refused-candidate": {
+    "file": "hardline_mcp/sessions.py",
+    "before": "                    conn.execute(\"ROLLBACK TO candidate\")\n",
+    "after": "",
+    "tests": [
+      "tests/test_thread_names.py::test_a_candidate_refused_after_its_writes_is_rolled_back_alone"
+    ]
+  },
+  "names-fulfilled-claim-carries-its-thread": {
+    "file": "hardline_mcp/server.py",
+    "before": "            result = _register_locked(label, record.agent, wait=False, thread=record.thread)\n",
+    "after": "            result = _register_locked(label, record.agent, wait=False, thread=None)\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_fulfilled_claim_is_bound_as_its_request_was"
+    ]
+  },
+  "names-renumber-above-another-writer": {
+    "file": "hardline_mcp/bindings.py",
+    "before": "        [(base + i, lane, thread, pid, key) for i, lane in enumerate(dict.fromkeys(order), 1)],\n",
+    "after": "        [(i, lane, thread, pid, key) for i, lane in enumerate(dict.fromkeys(order), 1)],\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_is_placed_above_another_writers_names_on_the_thread"
+    ]
+  },
+  "names-paging-continues": {
+    "file": "hardline_mcp/server.py",
+    "before": "    record[\"cursor\"] = rows[-1][\"seq\"] if rows else record[\"cursor\"]\n",
+    "after": "    record[\"cursor\"] = None\n",
+    "tests": [
+      "tests/test_thread_names.py::test_more_than_a_page_of_names_comes_back_over_two_attempts"
+    ]
+  },
+  "names-pending-dismissal-unbinds": {
+    "file": "hardline_mcp/server.py",
+    "before": "            unbound = bool(thread) and bindings.unbind(lane, thread)\n",
+    "after": "            unbound = False\n",
+    "tests": [
+      "tests/test_thread_names.py::test_cancelling_a_waiting_claim_withdraws_it_from_the_thread"
+    ]
+  },
+  "names-discovery-declares-codex": {
+    "file": "hardline_mcp/server.py",
+    "before": "            adapters.declare_agent(agent)  # names under codex: are held here\n",
+    "after": "            pass\n",
+    "tests": [
+      "tests/test_thread_names.py::test_restoration_declares_codex_when_nothing_else_did"
+    ]
+  },
+  "names-derived-release-durable-first": {
+    "file": "hardline_mcp/server.py",
+    "before": "            if lane:\n                sessions.release_derived(\n",
+    "after": "            adapters.release_lane(label)\n            if lane:\n                sessions.release_derived(\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_failed_derived_release_keeps_the_claim"
+    ]
+  },
+  "names-publish-origins-before-the-list": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "        _restored = frozenset(prepared.restored)\n        _claimed_lanes[:] = prepared.claims\n",
+    "after": "        _claimed_lanes[:] = prepared.claims\n        _restored = frozenset(prepared.restored)\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_publication_that_fails_part_way_is_repaired_in_order"
+    ]
+  },
+  "names-dead-host-restores-nothing": {
+    "file": "hardline_mcp/server.py",
+    "before": "        return \"launching host exited\"\n",
+    "after": "        return None\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_dead_launching_host_restores_nothing"
+    ]
+  },
+  "names-missing-table-is-not-empty": {
+    "file": "hardline_mcp/bindings.py",
+    "before": "            raise\n        return None\n",
+    "after": "            raise\n        return []\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_store_without_the_table_says_so"
+    ]
+  },
+  "names-explicit-claim-clears-an-orphan-origin": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "        _restored = _restored - {label}\n        _claimed_lanes.append(label)\n",
+    "after": "        _claimed_lanes.append(label)\n",
+    "tests": [
+      "tests/test_thread_names.py::test_an_explicit_claim_clears_an_origin_a_failed_publication_left"
+    ]
+  },
+  "names-race-claim-publication-locked": {
+    "file": "hardline_mcp/server.py",
+    "before": "    with _identity_lock:\n        refused = adapters.claim_lane(label)\n",
+    "after": "    with contextlib.nullcontext():\n        refused = adapters.claim_lane(label)\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job"
+    ]
+  },
+  "names-race-job-creation-locked": {
+    "file": "hardline_mcp/server.py",
+    "before": "        with _identity_lock:\n            # Deliver back to THIS session's lane",
+    "after": "        with contextlib.nullcontext():\n            # Deliver back to THIS session's lane",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job"
+    ]
+  },
+  "names-origin-cleared-before-the-append": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "        _restored = _restored - {label}\n        _claimed_lanes.append(label)\n",
+    "after": "        _claimed_lanes.append(label)\n        _restored = _restored - {label}\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_claim_whose_origin_cleanup_fails_is_left_unclaimed_and_retried"
     ]
   }
 }

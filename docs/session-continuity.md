@@ -111,6 +111,63 @@ Also corrected in passing: the docs claimed acquisition needs positive evidence 
 - **Parsing `--fork-session --resume` from the host command line.** It's undocumented and per-host, and it proves ancestry, not move-versus-copy.
 - **A SessionEnd hook releasing the old lanes.** It does not fire on a move.
 
+## A Codex thread's names (2026-10-16)
+
+A Codex session's names come back by themselves. Claude conversations still get advice only, as above.
+
+**Why Codex, and why now.** A Codex session's hardline server changes with every restart or reconnect (one server per loaded thread), and its derived lane is parent-derived, so it changes too. Its claimed names were lost every time, and Claude sessions addressing `codex:constructicon-wave` reached nobody until a human told the session to claim the name again. Its thread does not change: Codex puts the thread id in every `tools/call` `_meta`, a resume keeps it, and a fork makes a new one. So the name is bound to the thread, not to anything about the process.
+
+**The record.** `thread_names` (`bindings.py`): one row per name, holding the thread it belongs to, its place in that thread's list (`seq`), and the server that last held it there `(pid, process_key)`. Only attributed actions write it:
+- an explicit claim from a request on the wake's pinned, unstopped top-level thread, for a Codex name, by a process with an identity token, binds the name to the thread (`bound_to_thread: true`);
+- any other explicit claim unbinds it (`binding_note` says why);
+- a release or a dismissal (`release_session` of a name not held) withdraws it, whoever wrote it for this thread;
+- a restoration transfers it to the restoring server.
+
+Automatic grants (startup, heartbeat, repair) never touch it, so a name another process merely re-acquired keeps its thread's claim; after that process exits, the thread's next server gets it back with its backlog, as a claim would. An explicit claim that cannot be attributed, including a repeated `register_session` from a subagent or after the wake stopped, does remove the binding: claim from the top-level thread to keep it.
+
+**Restoration.** The wake's poll runs it, through `_regain_lanes`, never a tool. The first poll after the session's first hardline call surveys up to eight of the thread's bindings without the writer. A binding is restorable when its writer is verifiably DEAD, nothing else holds the name or owes work to it, and this server has room. Restorable bindings are then claimed in one transaction under `_identity_lock`. Attribution is checked once before any write, and each candidate is validated again inside its own savepoint before anything is written for it. A refused candidate costs nothing. Capacity is spent only on names that add a list entry. Then every row is reranked and the bindings renumbered to this server's order. The local claim list is adopted after the commit.
+
+Restored names form a run below the explicit claims, in durable order. The address is the last held lane, so a restart answers to the same name. More than eight names take one further fulfil per eight. `list_agents().you.restoration` reports what the last sweep found.
+
+**Async admission.** A dispatch whose result would go to the parent-derived lane is refused, retryably, while this thread has bindings this server does not hold. A later server of the thread is not guaranteed to hold that lane, so it might never read the result. The refusal names the lanes and two ways out: claim a name, or dismiss one with `release_session`. A server with a claimed name or a reproducible lane dispatches as before. The rule reads the table at that moment, under the same lock as recipient selection and `jobs.create`; another process binding after the read is accepted as the boundary.
+
+**What it does not do.** Nothing happens before the session's first hardline call, so an idle resumed thread is not woken. Restored names reach `inbox` after the next eligible poll, not in the pinning call. Two live servers on one thread (a TUI and the desktop app) share the list, and the first eligible one wins a name. A grant by an older revision is invisible to the table. Existing names have no binding until they are claimed once on this revision. Consumption stays process-wide.
+
+**Design record.** The design took nine review rounds. Two first designs were rejected: restoring from `lane_hints`, which are lossy advice; and a writer-scoped table, where a stale binding survived a takeover. Seven Fable/Astra rounds followed, recorded in `research/codex-names/`. What changed shape along the way:
+- per-request attribution, not the wake's pin;
+- no stored intent to cancel;
+- restored names as ordinary claims replayed in durable order;
+- restoration only on the poll thread, which deleted every time-budget rule;
+- admission reading one fact from the table instead of a restoration state machine.
+
+Astra approved round 7 with seven must-fix changes, applied in the build:
+- claim publication under `_identity_lock`;
+- one identity for admission and dismissal;
+- a release withdraws the pinned thread's binding;
+- durable-first release;
+- repair after a partial publication;
+- honest scheduling and contention wording;
+- regressions for each.
+
+The implementation was then reviewed by both, and Astra reviewed the fixes once more. What the reviews found, and where it stands:
+- **Adoption without the ownership rule, fixed.** A name already held here skipped the rule and its registry grant, though held here is memory, not a grant. Every candidate is now checked and granted.
+- **Publication, fixed.** It is prepared before the commit and published origins first, each origins set rebound whole, so a fault part way leaves names unlisted rather than listed without their origin. The next attempt then adopts them again. An explicit claim of such a name before the repair clears its leftover origin, so it stays explicit.
+- **Missing table, fixed.** A store with no binding table reports `no binding table`.
+
+Regressions, each with a `names-*` mutation case, cover:
+- contested and grant-less adoption;
+- a candidate refused after its writes;
+- a publication fault and its repair;
+- multi-name order across a restart;
+- a dispatch and a claim interleaved by events, for explicit and fulfilled claims;
+- both two-restart variants, the second with S1 admitting the job before it dies;
+- paging, dismissal, a dead host, and discovery without a declared agent.
+
+Deferred, as reporting nits:
+- a held release that fails raises, where a pending one returns `ok: false`;
+- `restored` lists lanes without their unread counts;
+- dismissing a name another live server holds does not say that server keeps it.
+
 ## Operator note
 
 The left arrow moves a conversation easily by accident. `leftArrowOpensAgents: false` in `/config` disables it for foreground sessions; `/bg` remains a deliberate act.

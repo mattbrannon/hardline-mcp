@@ -170,8 +170,21 @@ def _no_leaked_claims():
     if server is not None:
         server._last_heartbeat.clear()
         server._registration_failure.clear()
+        _reset_restoration(server)
     yield
     adapters.reset_claimed_lanes()
+    if (server := sys.modules.get("hardline_mcp.server")) is not None:
+        _reset_restoration(server)
+
+
+def _reset_restoration(server) -> None:
+    """The Codex wake serve_streams installs, and what restoration last found,
+    are process state too: a pinned wake left behind turns every later async
+    dispatch into a continuity question."""
+    server._codex_wake.clear()
+    server._restoration.update(
+        policy="no thread", failure=None, outcomes={}, cursor=None, seen=set(), swept_at=None
+    )
 
 
 @pytest.fixture(autouse=True)
