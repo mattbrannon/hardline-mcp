@@ -435,6 +435,106 @@ def test_a_dispatch_racing_a_claim_never_goes_to_the_lane_the_claim_replaces(
     assert after.get("accepted") is True and after.get("lane") == "codex:r", after
 
 
+class _Unreadable:
+    """A prepared origin set that fails when published: a fault part way. Not
+    a set subclass: frozenset() copies a set's table without iterating it."""
+
+    def __init__(self, items):
+        self.items = set(items)
+
+    def __iter__(self):
+        raise RuntimeError("injected publication fault")
+
+
+def test_a_publication_that_fails_part_way_is_repaired_in_order(wake, store, monkeypatch):
+    """A fault while publishing must leave the name repairable, not listed
+    without its origin: then a newer restored name lands below it, not above."""
+    prepare = adapters.prepare_restoration
+    faults = [True]
+
+    def faulty(labels, order):
+        prepared = prepare(labels, order)
+        if faults and faults.pop():
+            prepared = prepared._replace(restored=_Unreadable(prepared.restored))
+        return prepared
+
+    monkeypatch.setattr(adapters, "prepare_restoration", faulty)
+    bind(store, "codex:a", 1)
+    server._restore_pending()
+    assert server._restoration["failure"], "the fault was not reported"
+    server._restore_pending()  # repaired
+    assert adapters.claimed_lanes() == ("a",)
+    bind(store, "codex:b", 5)
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ("a", "b"), "a was read as an explicit claim"
+
+
+def test_a_dead_launching_host_restores_nothing(wake, store, monkeypatch):
+    bind(store, "codex:a", 1)
+    monkeypatch.setattr(adapters, "host_identity", lambda: {"host_pid": GONE, "host_key": "gone"})
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ()
+    assert server._restoration["policy"] == "launching host exited"
+
+
+def test_a_store_without_the_table_says_so(wake, store):
+    with closing(sqlite3.connect(store)) as raw, raw:
+        raw.execute("DROP TABLE IF EXISTS thread_names")
+    server._restore_pending()
+    assert server._restoration["policy"] == "no binding table"
+
+
+@pytest.mark.parametrize("path", ["explicit", "fulfilled"])
+def test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job(
+    wake, store, monkeypatch, path
+):
+    """The dispatch holds the identity lock from choosing its recipient to
+    creating its job; a claim made durable meanwhile publishes only after."""
+    import threading
+    import time
+
+    chosen, durable, events = threading.Event(), threading.Event(), []
+    result_lane, claim, claim_lane = server._result_lane, sessions.claim, adapters.claim_lane
+
+    def choosing(agent):
+        lane = result_lane(agent)
+        chosen.set()
+        assert durable.wait(30)  # the claim is durable and now wants the lock
+        time.sleep(0.3)
+        events.append("dispatch decided")
+        return lane
+
+    def claiming(**kw):
+        got = claim(**kw)
+        durable.set()
+        return got
+
+    monkeypatch.setattr(server, "_result_lane", choosing)
+    monkeypatch.setattr(sessions, "claim", claiming)
+    monkeypatch.setattr(
+        adapters, "claim_lane", lambda label: events.append("claim published") or claim_lane(label)
+    )
+    dispatched = {}
+    dispatcher = threading.Thread(target=lambda: dispatched.update(_admit()))
+    dispatcher.start()
+    assert chosen.wait(30)
+    if path == "explicit":
+        claimer = threading.Thread(
+            target=server._register_session_impl, args=("r", None, False, THREAD)
+        )
+    else:
+        assert adapters.await_lane("r", "codex", THREAD) is None
+        claimer = threading.Thread(target=server._fulfil_pending)
+    claimer.start()
+    dispatcher.join(30)
+    claimer.join(30)
+    assert events == ["dispatch decided", "claim published"], events
+    # Decided before the claim published, on a consistent snapshot: R was
+    # durable but not yet held here, so the dispatch was refused, not sent to
+    # the lane the claim was replacing.
+    assert dispatched.get("accepted") is False and dispatched.get("retryable") is True, dispatched
+
+
 def test_a_restoration_whose_local_half_was_lost_is_repaired(wake, store):
     """Committed, then the process forgot it (failure after commit): the next
     attempt finds this process's own row unheld and claims it again."""
@@ -633,11 +733,20 @@ async def test_a_job_whose_server_died_is_lost_not_announced_after_the_restart(
 ):
     """The other variant: S1 exits before the job finishes. S2 gets the name
     back, the job reads lost, and no completion notice exists to read."""
-    bind(store, "codex:r", 1)
-    with monkeypatch.context() as as_s1:
-        as_s1.setattr(jobs, "current_identity", lambda: (GONE, "gone"))  # S1, now dead
-        job = jobs.create(agent="codex", requester="codex:r", label=None, request={}, db_path=store)
-        jobs.mark_running(job, db_path=store)
+    from concurrent.futures import Future
+
+    bind(store, "codex:r", 1)  # P claimed R, then exited
+    server._restore_pending()  # S1 restores R
+    never_run = Future()  # S1 accepts the job and dies before it runs
+    with monkeypatch.context() as s1:
+        s1.setattr(server._async_executor, "submit", lambda fn: never_run)
+        receipt = _admit()
+    assert receipt.get("accepted") is True and receipt.get("lane") == "codex:r", receipt
+    job = receipt["job_id"]
+    with closing(sqlite3.connect(store)) as raw, raw:  # S1's death, as its job records it
+        raw.execute("UPDATE jobs SET owner_pid = ?, owner_key = 'gone' WHERE job_id = ?", (GONE, job))
+    _restart(store)
+    never_run.set_result({"ok": False})  # the slot S1's process held
     server._restore_pending()  # S2
     assert adapters.lane_suffix() == "r"
     assert (await server.job_status(job_id=job)).get("job", {}).get("state") == jobs.LOST

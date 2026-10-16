@@ -149,12 +149,24 @@ Astra approved round 7 with seven must-fix changes, applied in the build:
 - honest scheduling and contention wording;
 - regressions for each.
 
-The implementation was then reviewed by both. Each review caught the same defect: adopting a name already held here skipped the ownership rule and its registry grant, though held here is memory, not a grant. Each also named the mutations its tests let survive. Now fixed:
-- every candidate is checked against the ownership rule and given its registry grant;
-- the restoration's claim list is prepared before the commit and applied whole after it;
-- a store with no binding table reports `no binding table`.
+The implementation was then reviewed by both, and Astra reviewed the fixes once more. What the reviews found, and where it stands:
+- **Adoption without the ownership rule, fixed.** A name already held here skipped the rule and its registry grant, though held here is memory, not a grant. Every candidate is now checked and granted.
+- **Publication, fixed.** It is prepared before the commit and published origins first, each origins set rebound whole, so a fault part way leaves names unlisted rather than listed without their origin. The next attempt then adopts them again.
+- **Missing table, fixed.** A store with no binding table reports `no binding table`.
 
-Regressions now cover each counterexample, including a real claim-and-dispatch interleaving and both two-restart variants. Each has a `names-*` mutation case.
+Regressions, each with a `names-*` mutation case, cover:
+- contested and grant-less adoption;
+- a candidate refused after its writes;
+- a publication fault and its repair;
+- multi-name order across a restart;
+- a dispatch and a claim interleaved by events, for explicit and fulfilled claims;
+- both two-restart variants, the second with S1 admitting the job before it dies;
+- paging, dismissal, a dead host, and discovery without a declared agent.
+
+Deferred, as reporting nits:
+- a held release that fails raises, where a pending one returns `ok: false`;
+- `restored` lists lanes without their unread counts;
+- dismissing a name another live server holds does not say that server keeps it.
 
 ## Operator note
 

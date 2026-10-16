@@ -801,9 +801,10 @@ class Pending(NamedTuple):
 
 _pending_claims: dict[str, Pending] = {}
 
-# Claims of restored origin (bindings, ``adopt_restored``): the claim list is
-# the restored run, oldest durable place first, then the explicit run.
-_restored: set[str] = set()
+# Claims of restored origin (bindings, ``publish_restoration``): the claim list
+# is the restored run, oldest durable place first, then the explicit run. A
+# frozenset, only ever rebound whole, so no reader or failure sees it half made.
+_restored: frozenset[str] = frozenset()
 
 
 def _capacity_refusal(label: str) -> Optional[str]:
@@ -886,10 +887,11 @@ def release_lane(label: str) -> None:
     Only touches runtime claims. A lane derived from the environment is not a
     claim and cannot be surrendered - it is what this process is.
     """
+    global _restored
     with _claim_lock:
         if label in _claimed_lanes:
             _claimed_lanes.remove(label)
-        _restored.discard(label)
+        _restored = _restored - {label}
 
 
 def claimed_lanes() -> tuple[str, ...]:
@@ -950,12 +952,18 @@ def prepare_restoration(labels: Iterable[str], order: list[tuple[str, int]]) -> 
 
 
 def publish_restoration(prepared: Restoration) -> None:
-    """Apply a prepared restoration, list and origins in one step. No capacity
-    check: the restoring transaction spent the slots."""
+    """Apply a prepared restoration. No capacity check: the restoring
+    transaction spent the slots.
+
+    Origins first, each a whole rebinding: an origin for a name not yet listed
+    is inert, so a failure before the list is replaced leaves the new names
+    simply unlisted, which the next attempt finds unheld and adopts again
+    (``sessions.survey``). The reverse order could leave them listed without
+    their origin - read as explicit claims, and never repaired."""
+    global _restored
     with _claim_lock:
+        _restored = frozenset(prepared.restored)
         _claimed_lanes[:] = prepared.claims
-        _restored.clear()
-        _restored.update(prepared.restored)
 
 
 def qualify(agent: str, labels: Iterable[str]) -> tuple[str, ...]:
@@ -1018,10 +1026,11 @@ def declare_agent(agent: str) -> None:
 def reset_claimed_lanes() -> None:
     """Forget every runtime claim and declaration. For tests; process-local
     state must not leak between them the way an env var cannot."""
+    global _restored
     with _claim_lock:
         _claimed_lanes.clear()
         _pending_claims.clear()
-        _restored.clear()
+        _restored = frozenset()
         _declared_agent.clear()
 
 

@@ -4279,6 +4279,7 @@
     "before": "    with _identity_lock:\n        refused = adapters.claim_lane(label)\n",
     "after": "    with contextlib.nullcontext():\n        refused = adapters.claim_lane(label)\n",
     "tests": [
+      "tests/test_thread_names.py::test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job",
       "tests/test_thread_names.py::test_claims_and_jobs_publish_under_the_identity_lock"
     ]
   },
@@ -4287,6 +4288,7 @@
     "before": "        with _identity_lock:\n            # Deliver back to THIS session's lane",
     "after": "        with contextlib.nullcontext():\n            # Deliver back to THIS session's lane",
     "tests": [
+      "tests/test_thread_names.py::test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job",
       "tests/test_thread_names.py::test_claims_and_jobs_publish_under_the_identity_lock"
     ]
   },
@@ -4392,6 +4394,30 @@
     "after": "            adapters.release_lane(label)\n            if lane:\n                sessions.release_derived(\n",
     "tests": [
       "tests/test_thread_names.py::test_a_failed_derived_release_keeps_the_claim"
+    ]
+  },
+  "names-publish-origins-before-the-list": {
+    "file": "hardline_mcp/adapters.py",
+    "before": "        _restored = frozenset(prepared.restored)\n        _claimed_lanes[:] = prepared.claims\n",
+    "after": "        _claimed_lanes[:] = prepared.claims\n        _restored = frozenset(prepared.restored)\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_publication_that_fails_part_way_is_repaired_in_order"
+    ]
+  },
+  "names-dead-host-restores-nothing": {
+    "file": "hardline_mcp/server.py",
+    "before": "        return \"launching host exited\"\n",
+    "after": "        return None\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_dead_launching_host_restores_nothing"
+    ]
+  },
+  "names-missing-table-is-not-empty": {
+    "file": "hardline_mcp/bindings.py",
+    "before": "            raise\n        return None\n",
+    "after": "            raise\n        return []\n",
+    "tests": [
+      "tests/test_thread_names.py::test_a_store_without_the_table_says_so"
     ]
   }
 }
