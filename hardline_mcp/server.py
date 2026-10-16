@@ -40,6 +40,7 @@ from mcp.types import JSONRPCMessage, JSONRPCNotification
 from . import (
     adapters,
     announce,
+    bindings,
     channel,
     claude_inbox,
     codex_queue,
@@ -615,16 +616,18 @@ def _fulfil_pending() -> list[str]:
     is the one already enforced everywhere: a live or unprobeable holder, or
     work still owed to the name, keeps the claim waiting.
     """
-    pending = adapters.pending_claims()
+    pending = adapters.pending_records()
     if not pending or not _claim_mutex.acquire(blocking=False):
         return []
     granted = []
     try:
-        for label, agent in pending.items():
-            # Cancelled by release_session since the snapshot was taken.
-            if label not in adapters.pending_claims():
+        for label, record in pending.items():
+            # Cancelled, or cancelled and claimed again, since the snapshot
+            # was taken: only the same record is fulfilled.
+            if adapters.pending_records().get(label) is not record:
                 continue
-            result = _register_locked(label, agent, wait=False)
+            # Bound as the original request would have been, revalidated now.
+            result = _register_locked(label, record.agent, wait=False, thread=record.thread)
             if result.get("ok"):
                 granted.append(result["lane"])
     finally:
@@ -643,23 +646,39 @@ def _regain_lanes() -> list[str]:
     checks are memory until there is something to retry: an idle poll stays a
     reader. Job writes the store refused go first, so a session idle until its
     result's notice wakes it is not waiting on a notice nothing will write.
+    Last, a Codex thread's names (``_restore_pending``). Each stage is isolated:
+    one that raises is logged and the next still runs.
     """
-    _settle_debts()
+    _stage(_settle_debts)
     if _registration_failure:
-        _announce_self()
-    return _fulfil_pending()
+        _stage(_announce_self)
+    granted = _stage(_fulfil_pending, fallback=[])
+    _stage(_restore_pending)
+    return granted
+
+
+def _stage(step, fallback=None):
+    """Run one stage of ``_regain_lanes``; log a failure and go on."""
+    try:
+        return step()
+    except Exception as exc:  # noqa: BLE001 - one stage must not starve the rest
+        channel._log(f"{step.__name__} failed: {type(exc).__name__}: {exc}")
+        return fallback
 
 
 def _register_session_impl(
-    label: str, agent: str | None, wait: bool = False
+    label: str, agent: str | None, wait: bool = False, thread: str | None = None
 ) -> dict:
     """The body of ``register_session``. Serialized by ``_REGISTER_LIMITER``
-    against other explicit claims and by ``_claim_mutex`` against fulfilment."""
+    against other explicit claims and by ``_claim_mutex`` against fulfilment
+    and restoration. ``thread`` is the request's own Codex thread, if any."""
     with _claim_mutex:
-        return _register_locked(label, agent, wait)
+        return _register_locked(label, agent, wait, thread=thread)
 
 
-def _register_locked(label: str, agent: str | None, wait: bool) -> dict:
+def _register_locked(
+    label: str, agent: str | None, wait: bool, thread: str | None = None
+) -> dict:
     agent = (agent or adapters.self_agent() or "").strip().lower()
     if not agent:
         return {
@@ -695,11 +714,13 @@ def _register_locked(label: str, agent: str | None, wait: bool) -> dict:
     if refused:
         return {"ok": False, "error": refused}
 
+    binding, binding_note = _binding_for(thread, agent)
     claimed = sessions.claim(
         agent=agent,
         label=label,
         lanes=adapters.recipients_before_claim(agent, label),
         ranked=True,
+        binding=binding,
         **adapters.host_identity(),
     )
     if not claimed.get("ok"):
@@ -708,7 +729,7 @@ def _register_locked(label: str, agent: str | None, wait: bool) -> dict:
         waitable = "held_by" in claimed or "outstanding_jobs" in claimed
         if not (wait and waitable):
             return claimed
-        refused = adapters.await_lane(label, agent)
+        refused = adapters.await_lane(label, agent, thread)
         if refused:
             return {**claimed, "error": refused}
         return {
@@ -724,22 +745,24 @@ def _register_locked(label: str, agent: str | None, wait: bool) -> dict:
     # Only adopt the lane locally once the registry has accepted it.
     # Claiming first would rename this process to a name it lost the race
     # for, and every subsequent dispatch would address results to a lane
-    # held by someone else.
-    refused = adapters.claim_lane(label)
-    if refused:
-        sessions.drop_lane(claimed["lane"])
-        return {"ok": False, "error": refused, "lane": claimed["lane"]}
-
-    # Remember the identity too, not just the name. Every later ownership
-    # check re-derives it, and for the sessions that must pass `agent`
-    # explicitly there is nothing in the environment to re-derive it FROM.
-    adapters.declare_agent(agent)
+    # held by someone else. Under _identity_lock, as async admission chooses
+    # a recipient: a dispatch sees this claim whole or not at all.
+    with _identity_lock:
+        refused = adapters.claim_lane(label)
+        if refused:
+            sessions.drop_lane(claimed["lane"])
+            return {"ok": False, "error": refused, "lane": claimed["lane"]}
+        # Remember the identity too, not just the name. Every later ownership
+        # check re-derives it, and for the sessions that must pass `agent`
+        # explicitly there is nothing in the environment to re-derive it FROM.
+        adapters.declare_agent(agent)
+        _restoration["outcomes"].pop(claimed["lane"], None)
     _announce_self(agent)
     _remember(claimed["lane"])
     # A name is a role, so a claim takes its backlog too: say so, rather than
     # let a stranger's mail read as written to this session.
     inherited = claimed["inherited_unread"]
-    return {
+    response = {
         "ok": True,
         "lane": claimed["lane"],
         "agent": agent,
@@ -757,6 +780,12 @@ def _register_locked(label: str, agent: str | None, wait: bool) -> dict:
             + "inbox() continues to read every lane you have held."
         ),
     }
+    if _pinned_thread() is not None:
+        # Whether this thread's next server will claim the name back.
+        response["bound_to_thread"] = bool(claimed.get("bound_to_thread"))
+        if not response["bound_to_thread"]:
+            response["binding_note"] = binding_note or "no process identity to record"
+    return response
 
 
 def _lane_advice(to_agent: str) -> str | None:
@@ -1148,6 +1177,8 @@ async def list_agents() -> dict:
     if previously_held := await _in_thread(_previously_held):
         you["previously_held"] = previously_held
         you["previously_held_note"] = PREVIOUSLY_HELD_NOTE
+    if restoration := await _in_thread(_restoration_report):
+        you["restoration"] = restoration
     if revision_note := await _in_thread(_revision_note):
         you["revision_note"] = revision_note
 
@@ -1189,16 +1220,282 @@ async def list_agents() -> dict:
 def _release_locked(label: str, lane: str | None) -> None:
     """Give up a name locally and durably, as one step.
 
-    Both halves under ``_identity_lock``, and the durable delete LAST. Dropping
-    local ownership first and then awaiting the delete leaves a window in which
-    a heartbeat re-adds the row this call is about to remove - and because
-    registration is additive, nothing later takes it back out. The lane would
-    then be advertised and unclaimable while this process no longer reads it.
+    Both halves under ``_identity_lock``, so a heartbeat cannot write back the
+    row this call removes (registration is additive: nothing later would take
+    it out). The durable half FIRST: a failure leaves the name held here,
+    locally and durably, so a retry follows the same path, rather than a
+    registry row and a thread binding this process no longer reads. The
+    binding goes with the row: this process's, or the pinned thread's.
     """
     with _identity_lock:
-        adapters.release_lane(label)
         if lane:
-            sessions.drop_lane(lane)
+            sessions.drop_lane(lane, thread=_pinned_thread())
+        adapters.release_lane(label)
+        _restoration["outcomes"].pop(lane, None)
+
+
+# ── a Codex thread's names ───────────────────────────────────────────────────
+# A name claimed from a request on the wake's pinned top-level thread is bound
+# to that thread (``bindings``), and the thread's next server claims it back on
+# its wake's poll (``_restore_pending``). docs/session-continuity.md, "A Codex
+# thread's names".
+
+# The Codex wake ``serve_streams`` made: the one connection whose thread names
+# are bound to. Empty in a process serving no streams (tests set it).
+_codex_wake: list["codex_queue.CodexWake"] = []
+
+_RESTORE_PAGE = 8  # bindings examined per attempt; the rest at the next fulfil
+
+# What the last restoration attempts found, for list_agents and refusals. Written
+# only under _identity_lock at the end of an attempt, and by release/dismissal;
+# nothing decides from it - async admission reads the table itself.
+_restoration: dict = {
+    "policy": "no thread",
+    "failure": None,
+    "outcomes": {},  # recipient -> (outcome, reason)
+    "cursor": None,  # seq below which the current sweep continues
+    "seen": set(),
+    "swept_at": None,
+}
+
+
+def _pinned_thread() -> str | None:
+    """The thread this server's Codex connection is pinned to, stopped or not."""
+    return _codex_wake[0].pinned() if _codex_wake else None
+
+
+def _attribution(thread: str | None) -> str | None:
+    """``thread`` if names may be bound to it now (``CodexWake.attribution``)."""
+    return _codex_wake[0].attribution(thread) if _codex_wake else None
+
+
+def _request_thread(ctx: "Context | None") -> str | None:
+    """The top-level Codex thread the current request came from, if any."""
+    try:
+        meta = ctx.request_context.meta if ctx is not None else None
+    except Exception:  # noqa: BLE001 - outside a request, or no metadata
+        return None
+    if meta is None:
+        return None
+    return codex_queue.thread_of(meta.model_dump(by_alias=True))
+
+
+def _binding_for(thread: str | None, agent: str) -> tuple:
+    """``(binding, note)`` for an explicit claim: bound to ``thread`` only when
+    it is the pinned, unstopped top-level thread, the claim is Codex's, and
+    this process has an identity to record as the writer. Otherwise "unbind":
+    the claimed name no longer belongs to whichever thread had it."""
+    if thread is None:
+        note = "the request named no top-level Codex thread"
+    elif _attribution(thread) != thread:
+        note = "the request's thread is not this connection's pinned thread"
+    elif agent != "codex":
+        note = f"the claim is for {agent!r}, and only Codex names are bound to a thread"
+    elif procid.current_identity()[1] is None:
+        note = "this process has no identity token to record as the name's holder"
+    else:
+        return ("bind", thread), None
+    return "unbind", note
+
+
+def _labels(recipients) -> list[str]:
+    return [lane.split(":", 1)[1] for lane in recipients]
+
+
+def _label_order(order) -> list[tuple[str, int]]:
+    """``(recipient, seq)`` pairs as ``(label, seq)``."""
+    return [(lane.split(":", 1)[1], seq) for lane, seq in order]
+
+
+def _why(lane: str) -> str:
+    """What the last sweep found for ``lane``, as text."""
+    outcome = _restoration["outcomes"].get(lane)
+    if outcome is None:
+        return "not yet examined"
+    return f"{outcome[0]}: {outcome[1]}" if outcome[1] else outcome[0]
+
+
+def _restore_policy(thread: str | None) -> str | None:
+    """Why this server restores nothing now, or None. Asked under ``_claim_mutex``."""
+    if thread is None:
+        return "no thread"
+    if _attribution(thread) is None:
+        return "stopped: a second top-level thread called this connection"
+    agent = adapters.self_agent()
+    if agent and agent != "codex":
+        return f"this process is {agent!r}"
+    if procid.current_identity()[1] is None:
+        return "no process identity"
+    host = adapters.host_identity()
+    if host.get("host_pid") is not None and procid.instance_state(
+        host["host_pid"], host.get("host_key")
+    ) == procid.DEAD:
+        return "launching host exited"
+    return None
+
+
+def _restore_pending() -> None:
+    """Claim this Codex thread's names back. The wake's poll runs it, through
+    ``_regain_lanes``; no tool does. Every failure is caught and published."""
+    if _pinned_thread() is None:  # a Claude wake, or nothing called yet
+        return
+    if not _claim_mutex.acquire(blocking=False):
+        return  # an explicit claim is running; the next eligible poll retries
+    try:
+        _restore_attempt()
+    except Exception as exc:  # noqa: BLE001 - reported, never raised
+        channel._log(f"codex names not restored: {type(exc).__name__}: {exc}")
+        with _identity_lock:
+            _restoration["failure"] = f"{type(exc).__name__}: {exc}"
+    finally:
+        _claim_mutex.release()
+
+
+def _restore_attempt() -> None:
+    """One page: survey without the writer, then restore the candidates in one
+    transaction under ``_identity_lock``, then publish. Caller holds ``_claim_mutex``,
+    so no claim or declaration lands between the identity read and the write."""
+    thread = _pinned_thread()
+    policy = _restore_policy(thread)
+    if policy:
+        with _identity_lock:
+            _restoration["policy"] = policy
+        return
+    agent = "codex"
+    with _identity_lock:
+        before = _restoration["cursor"]
+    rows = sessions.survey(
+        thread,
+        f"{agent}:",
+        before=before,
+        limit=_RESTORE_PAGE,
+        listed=adapters.qualify(agent, adapters.claimed_lanes()),
+        held=adapters.owned_recipients(agent),
+        pending=adapters.qualify(agent, adapters.pending_claims()),
+    )
+    outcomes = {r["lane"]: (r["outcome"], r["reason"]) for r in rows if r["outcome"] != "candidate"}
+    candidates = [r for r in rows if r["outcome"] == "candidate"]
+    with _identity_lock:
+        if candidates:
+            result = sessions.restore(
+                thread,
+                candidates,
+                agent=agent,
+                free=adapters.free_slots(),
+                plan=lambda new, order: adapters.qualify(
+                    agent, adapters.plan_restoration(_labels(new), _label_order(order))
+                ),
+                attribution=_attribution,
+                **adapters.host_identity(),
+            )
+            if result["stopped"]:
+                _restoration["policy"] = "stopped: a second top-level thread called this connection"
+                return
+            # Committed: memory follows, and nothing here can fail short of a
+            # bug - which the next attempt repairs (``sessions.survey``).
+            if result["new"]:
+                adapters.adopt_restored(_labels(result["new"]), _label_order(result["order"]))
+            outcomes.update(result["outcomes"])
+        if adapters.self_agent() is None and any(o in {"held", "restored"} for o, _ in outcomes.values()):
+            adapters.declare_agent(agent)  # names under codex: are held here
+        _publish_sweep(rows, outcomes)
+
+
+def _publish_sweep(rows: list[dict], outcomes: dict) -> None:
+    """Record an attempt's page. Caller holds ``_identity_lock``. A short page
+    ends the sweep: outcomes of bindings no longer seen are dropped."""
+    record = _restoration
+    record["policy"] = record["failure"] = None
+    record["outcomes"].update(outcomes)
+    record["seen"].update(outcomes)
+    record["cursor"] = rows[-1]["seq"] if rows else record["cursor"]
+    if len(rows) < _RESTORE_PAGE:
+        record["outcomes"] = {k: v for k, v in record["outcomes"].items() if k in record["seen"]}
+        record["seen"] = set()
+        record["cursor"] = None
+        record["swept_at"] = mailbox._iso(mailbox._default_now())
+
+
+def _restoration_report() -> dict | None:
+    """What the last restoration attempts found, for ``list_agents().you``;
+    None on a server with no pinned Codex thread."""
+    if _pinned_thread() is None:
+        return None
+    with _identity_lock:
+        record = dict(_restoration, outcomes=dict(_restoration["outcomes"]))
+    found = record["outcomes"]
+    report = {
+        "state": record["failure"] or record["policy"] or "ok",
+        "swept_at": record["swept_at"],
+        "restored": sorted(lane for lane, (o, _) in found.items() if o == "restored"),
+        "restoring": [
+            {"lane": lane, "why": _why(lane)}
+            for lane, (o, _) in sorted(found.items())
+            if o in {"awaiting", "blocked", "changed", "cap"}
+        ],
+        "bound_lanes": sorted(lane for lane, (o, _) in found.items() if o in {"held", "restored"}),
+    }
+    return report
+
+
+def _continuity_refusal(from_agent: str, recipient: str) -> tuple[dict | None, str | None]:
+    """``(refusal, note)`` for an async dispatch on a pinned Codex server.
+    Caller holds ``_identity_lock`` from recipient selection to ``jobs.create``.
+
+    Refused, retryably, when the result would go to the parent-derived lane
+    while this thread has names this server does not hold yet: a result there
+    is not found again after a restart. Decided from the table as read now, not
+    from the last sweep; another process binding after the read is accepted as
+    the boundary."""
+    thread = _pinned_thread()
+    if thread is None:
+        return None, None
+    local = adapters.self_agent() or "codex"
+    if adapters.base_agent(from_agent) != local:
+        return {
+            "ok": False,
+            "accepted": False,
+            "dispatched": False,
+            "error": (
+                f"from_agent {from_agent!r} is not this session's identity ({local!r}); "
+                "its result would go to a lane this session does not read"
+            ),
+        }, None
+    if adapters.claimed_lanes() or adapters.reproducible_lane_suffix():
+        return None, None
+    try:
+        unheld = bindings.unheld(thread, f"{local}:", adapters.owned_recipients(local))
+    except Exception as exc:  # noqa: BLE001 - a read that failed is not "none"
+        return {
+            "ok": False,
+            "accepted": False,
+            "dispatched": False,
+            "retryable": True,
+            "error": f"could not read this thread's names: {type(exc).__name__}: {exc}",
+        }, None
+    if not unheld:
+        note = (
+            f"The result goes to {recipient!r}, this server's own lane, which a later "
+            "server of this thread is not guaranteed to hold; claim a name with "
+            "register_session for results that should survive a restart."
+        )
+        return None, note
+    names = [{"lane": row["lane"], "why": _why(row["lane"])} for row in unheld]
+    first = names[0]["lane"].split(":", 1)[1]
+    return {
+        "ok": False,
+        "accepted": False,
+        "dispatched": False,
+        "retryable": True,
+        "unheld_names": names,
+        "error": (
+            "this thread's names are not held by this server yet: "
+            + ", ".join(n["lane"] for n in names)
+            + ". Retry after the next restoration poll; register_session(label=...) "
+            f"gives this server a name of its own; release_session(label={first!r}) "
+            "forgets that name for this thread."
+        ),
+    }, None
 
 
 # ── names held before ────────────────────────────────────────────────────────
@@ -1283,22 +1580,52 @@ def _release_session_impl(label: str) -> dict:
 
 
 def _release_or_cancel(label: str) -> dict:
+    # A pinned Codex server also withdraws the name from its thread, so the
+    # thread's next server does not claim back a name given up here.
+    thread = _pinned_thread()
+    bound_as = adapters.self_agent() or ("codex" if thread else None)
     waited_as = adapters.pending_claims().get(label)
     if waited_as is not None:
+        lane = f"{waited_as}:{label}"
+        # Durable first: a failed delete keeps the claim waiting and says so,
+        # rather than leave a binding the next server would restore.
+        try:
+            unbound = bool(thread) and bindings.unbind(lane, thread)
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "ok": False,
+                "error": f"could not withdraw {lane!r} from this thread: {type(exc).__name__}: {exc}",
+                "note": "Still waiting for that name; retry release_session.",
+            }
         adapters.cancel_pending(label)
-        return {
+        with _identity_lock:
+            _restoration["outcomes"].pop(lane, None)
+        response = {
             "ok": True,
-            "cancelled": f"{waited_as}:{label}",
+            "cancelled": lane,
             "note": "This session is no longer waiting for that name.",
         }
+        if unbound:
+            response["unbound"] = lane
+        return response
     agent = adapters.self_agent()
     if label not in adapters.held_lanes():
-        if agent and _forget(f"{agent}:{label}", own_grant=False):
-            return {
-                "ok": True,
-                "forgotten": f"{agent}:{label}",
-                "note": "No longer listed as a name this conversation held before.",
-            }
+        lane = f"{bound_as}:{label}" if bound_as else None
+        unbound = bool(thread and lane) and bindings.unbind(lane, thread)
+        forgotten = bool(agent) and _forget(f"{agent}:{label}", own_grant=False)
+        if unbound or forgotten:
+            with _identity_lock:
+                _restoration["outcomes"].pop(lane, None)
+            response = {"ok": True}
+            notes = []
+            if unbound:
+                response["unbound"] = lane
+                notes.append("This thread's next server will not claim it back.")
+            if forgotten:
+                response["forgotten"] = f"{agent}:{label}"
+                notes.append("No longer listed as a name this conversation held before.")
+            response["note"] = " ".join(notes)
+            return response
         return {
             "ok": False,
             "error": (
@@ -1306,7 +1633,8 @@ def _release_or_cancel(label: str) -> dict:
                 f"{list(adapters.held_lanes())}"
             ),
         }
-    if label == adapters.derived_lane_suffix():
+    derived = adapters.derived_lane_suffix()
+    if label == derived and label not in adapters.claimed_lanes():
         return {
             "ok": False,
             "error": (
@@ -1315,6 +1643,29 @@ def _release_or_cancel(label: str) -> dict:
             ),
         }
     lane = f"{agent}:{label}" if agent else None
+    if label == derived:
+        # A claim of its own derived name: the claim and its thread binding
+        # go, the lane stays - it is what this process IS - and drops back to
+        # the derived lane's place, durably first.
+        with _identity_lock:
+            remaining = [c for c in adapters.claimed_lanes() if c != label]
+            if lane:
+                sessions.release_derived(
+                    lane,
+                    order=adapters.qualify(agent, adapters._ordered(derived, remaining)),
+                    thread=thread,
+                )
+            adapters.release_lane(label)
+            _restoration["outcomes"].pop(lane, None)
+        return {
+            "ok": True,
+            "released": lane or label,
+            "held_lanes": list(adapters.held_lanes()),
+            "note": (
+                "No longer claimed or bound to this thread. It stays this session's "
+                "derived lane, which is what this process is."
+            ),
+        }
     _release_locked(label, lane)
     if lane:
         _forget(lane, own_grant=True)
@@ -1328,7 +1679,10 @@ def _release_or_cancel(label: str) -> dict:
 
 @mcp.tool()
 async def register_session(
-    label: str, agent: str | None = None, wait: bool = False
+    label: str,
+    agent: str | None = None,
+    wait: bool = False,
+    ctx: Context | None = None,
 ) -> dict:
     """Claim ``label`` as this session's name, so mail can be aimed at it.
 
@@ -1350,9 +1704,14 @@ async def register_session(
     before a rename remain reachable. Reclaim runtime names after reconnect;
     a successful later claimant inherits the name's unread backlog, counted
     in ``inherited_unread``.
+
+    In a Codex session, a name claimed from the top-level thread is bound to
+    that thread (``bound_to_thread``): the thread's next hardline server
+    claims it back by itself once this one has exited.
     """
+    thread = _request_thread(ctx)  # read here, on the request, not in the worker
     return await _in_thread(
-        _register_session_impl, label, agent, wait, limiter=_REGISTER_LIMITER
+        _register_session_impl, label, agent, wait, thread, limiter=_REGISTER_LIMITER
     )
 
 
@@ -2432,10 +2791,6 @@ def _admit_async(
             "dispatched": False,
             "error": "prompt must not be empty",
         }
-    # Deliver back to THIS session's lane, not the shared name. A result is
-    # owed to the session that asked for it; addressing it to bare "claude"
-    # is what let another session ack it out of sight.
-    recipient = _result_lane(from_agent)
     db_path = mailbox._resolve_db(None).resolve()
 
     slots = _async_slots
@@ -2461,27 +2816,40 @@ def _admit_async(
                 model, mode=mode, workdir=workdir
             )
             extra_ask_kwargs = {**(extra_ask_kwargs or {}), "resolve_model": False}
-        job_id = jobs.create(
-            agent=agent,
-            db_path=db_path,
-            requester=recipient,
-            label=label,
-            request={
-                "prompt_chars": len(prompt),
-                "model": model,
-                "effort": effort,
-                "mode": mode,
-                "workdir": workdir,
-                "write": write,
-                **_github_request(github, github_exclude, github_tools),
-                **({"routing": routing} if routing is not None else {}),
-                **({"model_resolution": resolution} if resolution else {}),
-                **({"model_hint": hint} if hint else {}),
-            },
-        )
+        # One critical section from the recipient to the job, so neither a
+        # release nor a claim or restoration landing in this process changes
+        # the lane between them.
+        with _identity_lock:
+            # Deliver back to THIS session's lane, not the shared name. A result
+            # is owed to the session that asked for it; addressing it to bare
+            # "claude" is what let another session ack it out of sight.
+            recipient = _result_lane(from_agent)
+            refusal, continuity_note = _continuity_refusal(from_agent, recipient)
+            if refusal is None:
+                job_id = jobs.create(
+                    agent=agent,
+                    db_path=db_path,
+                    requester=recipient,
+                    label=label,
+                    request={
+                        "prompt_chars": len(prompt),
+                        "model": model,
+                        "effort": effort,
+                        "mode": mode,
+                        "workdir": workdir,
+                        "write": write,
+                        **_github_request(github, github_exclude, github_tools),
+                        **({"routing": routing} if routing is not None else {}),
+                        **({"model_resolution": resolution} if resolution else {}),
+                        **({"model_hint": hint} if hint else {}),
+                    },
+                )
     except BaseException:
         slots.release()
         raise
+    if refusal is not None:
+        slots.release()
+        return refusal
 
     def _run() -> dict:
         # ask_fn (adapters.ask_claude/ask_codex) is designed to never raise -
@@ -2587,6 +2955,8 @@ def _admit_async(
         receipt["routing"] = routing
     if resolution:
         receipt["model_resolution"] = resolution
+    if continuity_note:
+        receipt["continuity_note"] = continuity_note
     return receipt
 
 
@@ -2877,6 +3247,7 @@ async def serve_streams(
     channel.install(pusher)
     wake = wake or codex_queue.CodexWake(fulfil=pusher.fulfil)
     announce.install(wake)
+    _codex_wake[:] = [wake]  # the connection a Codex thread's names are bound to
     low = mcp._mcp_server
     options = low.create_initialization_options(
         experimental_capabilities={channel.CAPABILITY: {}}

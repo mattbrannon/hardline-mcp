@@ -47,6 +47,30 @@ def _uuid(value) -> Optional[str]:
         return None
 
 
+def _parse(meta) -> Optional[tuple[str, dict]]:
+    """``(thread, turn metadata)`` from a ``tools/call`` ``_meta``, or None: the
+    thread a valid UUID, the turn metadata a dict naming that thread or none."""
+    turn = meta.get("x-codex-turn-metadata") if isinstance(meta, dict) else None
+    if not isinstance(turn, dict):
+        return None
+    thread = _uuid(meta.get("threadId"))
+    if thread is None or turn.get("thread_id") not in (None, thread):
+        return None
+    return thread, turn
+
+
+def thread_of(meta) -> Optional[str]:
+    """The top-level Codex thread a request came from, or None.
+
+    What a claim is attributed to: ``_meta`` as ``_parse`` accepts it, from a
+    ``user`` thread. A subagent's request names its own thread, never the one
+    its parent's names belong to."""
+    parsed = _parse(meta)
+    if parsed is None or parsed[1].get("thread_source") != "user":
+        return None
+    return parsed[0]
+
+
 def steering() -> Optional[str]:
     """Why notices cannot be steered here, or None when they can. Read when
     the wake is made, at startup: a change needs a hardline restart."""
@@ -158,6 +182,17 @@ class CodexWake(announce.Announcer):
     def arm(self, client: dict) -> None:
         client["on_call"] = self.observe
 
+    def pinned(self) -> Optional[str]:
+        """The thread this connection is pinned to, stopped or not."""
+        with self._lock:
+            return self.address
+
+    def attribution(self, thread: Optional[str]) -> Optional[str]:
+        """``thread`` if names may be bound to it now: it is the pinned thread
+        and no second top-level thread has stopped the wake. Memory only."""
+        with self._lock:
+            return thread if thread is not None and thread == self.address and not self.stopped else None
+
     def observe(self, params) -> None:
         """One ``tools/call``: pin the thread, or detect a conflicting one.
 
@@ -166,19 +201,19 @@ class CodexWake(announce.Announcer):
         its turn id, the candidate a notice is steered into. Called on the
         event loop: memory only, under the lock.
         """
-        meta = params.get("_meta") if isinstance(params, dict) else None
-        turn = meta.get("x-codex-turn-metadata") if isinstance(meta, dict) else None
-        if not isinstance(turn, dict):
+        parsed = _parse(params.get("_meta") if isinstance(params, dict) else None)
+        if parsed is None:
             return
-        thread = _uuid(meta.get("threadId"))
-        if thread is None or turn.get("thread_id") not in (None, thread):
-            return
+        thread, turn = parsed
         with self._lock:
             if self.address is None:
                 if turn.get("thread_source") != "user":
                     return  # only a top-level thread is ever the address
                 self.address = thread
                 self.declare()
+                # The first poll after the pin restores this thread's names
+                # (server._restore_pending), not the one FULFIL_S later.
+                self._last_fulfil = None
             elif thread != self.address and turn.get("thread_source") == "user" and not self.stopped:
                 self.stopped = True
                 self._notes.append(

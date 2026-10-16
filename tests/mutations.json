@@ -147,8 +147,8 @@
   },
   "held-lanes-a-claimed-derived-name-takes-its-claim-place": {
     "file": "hardline_mcp/adapters.py",
-    "before": "    return tuple(lanes + claims)\n",
-    "after": "    return tuple(dict.fromkeys(([derived] if derived else []) + claims))\n",
+    "before": "    lanes = [derived] if derived and derived not in claims else []\n    return tuple(lanes + list(claims))\n",
+    "after": "    return tuple(dict.fromkeys(([derived] if derived else []) + list(claims)))\n",
     "tests": [
       "tests/test_sessions.py::test_claiming_the_derived_name_makes_it_the_advertised_one"
     ]
@@ -275,8 +275,8 @@
   },
   "lane-acquisition-lock": {
     "file": "hardline_mcp/sessions.py",
-    "before": "            conn.execute(\"BEGIN IMMEDIATE\")\n",
-    "after": "",
+    "before": "        with conn:\n            conn.execute(\"BEGIN IMMEDIATE\")\n            for lane in requested:\n",
+    "after": "        with conn:\n            for lane in requested:\n",
     "tests": [
       "tests/test_ownership.py::test_acquisition_serializes_check_and_write"
     ]
@@ -758,8 +758,8 @@
   },
   "pending-claim-obeys-ownership-rule": {
     "file": "hardline_mcp/server.py",
-    "before": "            result = _register_locked(label, agent, wait=False)\n",
-    "after": "            result = {\"ok\": adapters.claim_lane(label) is None, \"lane\": f\"{agent}:{label}\"}\n",
+    "before": "            result = _register_locked(label, record.agent, wait=False, thread=record.thread)\n",
+    "after": "            result = {\"ok\": adapters.claim_lane(label) is None, \"lane\": f\"{record.agent}:{label}\"}\n",
     "tests": [
       "tests/test_continuity.py::test_a_waiting_claim_is_never_granted_while_the_holder_lives"
     ]
@@ -774,8 +774,8 @@
   },
   "pending-claim-release-cancels": {
     "file": "hardline_mcp/server.py",
-    "before": "    if waited_as is not None:\n        adapters.cancel_pending(label)\n",
-    "after": "    if waited_as is not None:\n        pass\n",
+    "before": "        adapters.cancel_pending(label)\n        with _identity_lock:\n",
+    "after": "        with _identity_lock:\n",
     "tests": [
       "tests/test_continuity.py::test_release_cancels_a_waiting_claim"
     ]
@@ -1755,8 +1755,8 @@
   },
   "codexwake-thread-agrees-with-turn-metadata": {
     "file": "hardline_mcp/codex_queue.py",
-    "before": "        if thread is None or turn.get(\"thread_id\") not in (None, thread):",
-    "after": "        if thread is None:",
+    "before": "    if thread is None or turn.get(\"thread_id\") not in (None, thread):\n",
+    "after": "    if thread is None:\n",
     "tests": [
       "tests/test_codex_queue.py::test_a_thread_id_that_disagrees_with_its_turn_metadata_is_ignored"
     ]
@@ -2144,8 +2144,8 @@
   },
   "take-back-writes-its-facts-now": {
     "file": "hardline_mcp/announce.py",
-    "before": "            self._dirty = True\n        self._flush()\n\n    # ── the loop",
-    "after": "            self._dirty = True\n\n    # ── the loop",
+    "before": "            self._dirty = True\n        self._flush()\n\n    # \u2500\u2500 the loop",
+    "after": "            self._dirty = True\n\n    # \u2500\u2500 the loop",
     "tests": [
       "tests/test_claude_inbox.py::test_a_notice_taken_back_is_no_push_and_its_mail_is_due_again"
     ]
@@ -2394,8 +2394,8 @@
   },
   "regain-retries-the-own-registration": {
     "file": "hardline_mcp/server.py",
-    "before": "    if _registration_failure:\n        _announce_self()\n    return _fulfil_pending()\n",
-    "after": "    return _fulfil_pending()\n",
+    "before": "    if _registration_failure:\n        _stage(_announce_self)\n",
+    "after": "",
     "tests": [
       "tests/test_channel.py::test_an_idle_session_refused_its_own_lane_takes_it_when_the_holder_exits"
     ]
@@ -2474,8 +2474,8 @@
   },
   "hint-dismissed-by-release": {
     "file": "hardline_mcp/server.py",
-    "before": "        if agent and _forget(f\"{agent}:{label}\", own_grant=False):\n",
-    "after": "        if False:\n",
+    "before": "        forgotten = bool(agent) and _forget(f\"{agent}:{label}\", own_grant=False)\n",
+    "after": "        forgotten = False\n",
     "tests": [
       "tests/test_hints.py::test_a_hint_not_wanted_is_forgotten_by_release"
     ]
@@ -2871,8 +2871,8 @@
   },
   "register-claims-wait-outside-the-worker-pool": {
     "file": "hardline_mcp/server.py",
-    "before": "        _register_session_impl, label, agent, wait, limiter=_REGISTER_LIMITER\n",
-    "after": "        _register_session_impl, label, agent, wait\n",
+    "before": "        _register_session_impl, label, agent, wait, thread, limiter=_REGISTER_LIMITER\n",
+    "after": "        _register_session_impl, label, agent, wait, thread\n",
     "tests": [
       "tests/test_sessions.py::test_register_session_does_not_hold_a_shared_worker_slot"
     ]
@@ -3121,8 +3121,8 @@
   },
   "the-wake-cycle-pays-debts": {
     "file": "hardline_mcp/server.py",
-    "before": "    _settle_debts()\n    if _registration_failure:\n",
-    "after": "    if _registration_failure:\n",
+    "before": "    _stage(_settle_debts)\n",
+    "after": "",
     "tests": [
       "tests/test_server.py::test_an_idle_session_pays_its_debts_on_its_wake_cycle"
     ]

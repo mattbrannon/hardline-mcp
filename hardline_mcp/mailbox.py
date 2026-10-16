@@ -127,12 +127,34 @@ CREATE TABLE IF NOT EXISTS process_revisions (
 );
 """
 
+# Which Codex thread each claimed name belongs to, so that thread's next server
+# claims it again (sessions.restore; docs/session-continuity.md, "A Codex
+# thread's names"). One row per name: the last attributed grant of it. `seq`
+# is the name's place in the thread's list; (pid, process_key) is the server
+# that last held it there, whose death makes it restorable. Written only by an
+# attributed claim, a restoration, a release or a dismissal, never by an
+# automatic grant; never pruned. Two statements, so a writer can create both
+# inside its transaction (`conn.execute` runs one at a time). Created on use too.
+THREAD_NAMES_TABLE = """
+CREATE TABLE IF NOT EXISTS thread_names (
+    lane        TEXT PRIMARY KEY,
+    thread      TEXT NOT NULL,
+    seq         INTEGER NOT NULL,
+    pid         INTEGER NOT NULL,
+    process_key TEXT NOT NULL,
+    bound_at    TEXT NOT NULL
+)"""
+THREAD_NAMES_INDEX = (
+    "CREATE INDEX IF NOT EXISTS thread_names_by_thread ON thread_names (thread, seq)"
+)
+
 _SCHEMA = (
     PUSH_DELIVERY_TABLE
     + CODEX_ROUTES_TABLE
     + LANE_HINTS_TABLE
     + MESSAGE_ACKS_TABLE
     + PROCESS_REVISIONS_TABLE
+    + THREAD_NAMES_TABLE + ";\n" + THREAD_NAMES_INDEX + ";\n"
 ) + """
 CREATE TABLE IF NOT EXISTS messages (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

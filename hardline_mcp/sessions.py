@@ -74,6 +74,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
+from . import bindings
 from .mailbox import PROCESS_REVISIONS_TABLE, _connect, _default_now, _iso, _resolve_db
 from .procid import ALIVE, DEAD, UNKNOWN, current_identity, instance_state, process_key
 
@@ -249,22 +250,226 @@ def _unread_for(conn: sqlite3.Connection, lane: str) -> int:
 
 
 def drop_lane(
-    lane: str, *, pid: Optional[int] = None, db_path: Optional[Path] = None
+    lane: str,
+    *,
+    pid: Optional[int] = None,
+    thread: Optional[str] = None,
+    db_path: Optional[Path] = None,
 ) -> bool:
     """Give up one lane this process holds. Returns whether a row was there.
 
-    The undo half of a claim whose local adoption was refused after the durable
-    write succeeded. Scoped to this pid so it can never release somebody else's
-    hold on the same name.
+    A release, or the undo half of a claim whose local adoption was refused
+    after the durable write succeeded. Scoped to this pid so it can never
+    release somebody else's hold on the same name. The name's thread binding
+    goes in the same transaction, whatever the registry rowcount: the one this
+    process wrote, or the pinned ``thread``'s (``bindings.withdraw``), so a
+    released name is not restored.
     """
     db_path = _resolve_db(db_path)
     pid = os.getpid() if pid is None else pid
+    key = current_identity()[1] if pid == os.getpid() else process_key(pid)
     with closing(_connect(db_path)) as conn:
         with conn:
+            bindings.withdraw(conn, lane=lane, pid=pid, key=key, thread=thread)
             cur = conn.execute(
                 "DELETE FROM agent_sessions WHERE pid = ? AND lane = ?", (pid, lane)
             )
         return cur.rowcount > 0
+
+
+def rerank(conn: sqlite3.Connection, *, pid: int, key: Optional[str], order: Iterable[str]) -> None:
+    """Write each of this process's rows' ``seq`` from its place in ``order``
+    (every recipient it holds, oldest first). Update-only: a lane without an
+    own row stays without one, and only rows of this exact identity
+    (``process_key IS``) move - never a reused pid's stranger or a holder."""
+    conn.executemany(
+        "UPDATE agent_sessions SET seq = ? WHERE pid = ? AND lane = ? AND process_key IS ?",
+        [(i, pid, lane, key) for i, lane in enumerate(dict.fromkeys(order), 1)],
+    )
+
+
+def release_derived(
+    lane: str, *, order: Iterable[str], thread: Optional[str], db_path: Optional[Path] = None
+) -> None:
+    """Release a claim of this process's own derived name: the binding goes and
+    the row drops to the derived lane's place in ``order``, in one transaction.
+    The registry row stays - the lane is still what this process IS."""
+    pid, key = current_identity()
+    with closing(_connect(_resolve_db(db_path))) as conn:
+        with conn:
+            bindings.withdraw(conn, lane=lane, pid=pid, key=key, thread=thread)
+            rerank(conn, pid=pid, key=key, order=order)
+
+
+# ── restoration (bindings; docs/session-continuity.md) ───────────────────────
+
+
+def survey(
+    thread: str,
+    prefix: str,
+    *,
+    before: Optional[int],
+    limit: int,
+    listed: Iterable[str],
+    held: Iterable[str],
+    pending: Iterable[str],
+    db_path: Optional[Path] = None,
+) -> list[dict]:
+    """The read phase of a restoration: one page of ``thread``'s bindings, each
+    with an ``outcome``. Takes no writer.
+
+    ``listed`` are the recipients of this process's claims, ``held`` everything
+    it holds (its derived lane too), ``pending`` the claims it awaits.
+    ``candidate`` rows carry ``kind`` - ``adopt`` (held here, a writer transfer)
+    or ``acquire`` - and ``new``, whether it would add a claim-list entry.
+    """
+    listed, held, pending = set(listed), set(held), set(pending)
+    pid, key = current_identity()
+    asked: dict[tuple, str] = {}
+
+    def probe(pid_: int, key_: Optional[str]) -> str:
+        if (pid_, key_) not in asked:
+            asked[(pid_, key_)] = instance_state(pid_, key_)
+        return asked[(pid_, key_)]
+
+    with closing(_connect(_resolve_db(db_path))) as conn:
+        rows = bindings.page(conn, thread=thread, prefix=prefix, before=before, limit=limit)
+        for row in rows:
+            lane, mine = row["lane"], (row["pid"], row["process_key"]) == (pid, key)
+            if lane in pending:
+                row.update(outcome="awaiting", reason="a claim of it is waiting here")
+            elif mine and lane in listed:
+                row.update(outcome="held", reason=None)
+            elif not mine and (state := probe(row["pid"], row["process_key"])) != DEAD:
+                row.update(outcome="blocked", reason=f"writer {state} (pid {row['pid']})")
+            elif lane not in held and (refusal := _refusal(conn, lane, pid, probe)):
+                row.update(outcome="blocked", reason=refusal["error"])
+            else:
+                kind = "adopt" if lane in held else "acquire"
+                # An own-writer row not held here is a restoration whose local
+                # half never happened: acquiring it again is idempotent.
+                row.update(outcome="candidate", reason=None, kind=kind, new=lane not in listed)
+    return rows
+
+
+def restore(
+    thread: str,
+    candidates: list[dict],
+    *,
+    agent: str,
+    free: int,
+    plan: Callable[[list[str], list[tuple[str, int]]], Iterable[str]],
+    attribution: Callable[[str], Optional[str]],
+    host_pid: Optional[int] = None,
+    host_key: Optional[str] = None,
+    now_fn: Callable[[], datetime] = _default_now,
+    db_path: Optional[Path] = None,
+) -> dict:
+    """The write phase: claim ``candidates`` back for this process, in one
+    transaction with a savepoint per candidate.
+
+    ``attribution(thread)`` is asked once, before any write: anything but
+    ``thread`` (the wake stopped) rolls back and returns ``{"stopped": True}``.
+    Each candidate is validated before any write for it - the binding row
+    unchanged, a foreign writer still DEAD, the ownership rule still granting
+    (``_refusal``) - and a refused one is rolled back to its savepoint alone,
+    leaving earlier acceptances. Capacity ``free`` is spent only by accepted
+    candidates that add a list entry (``new``). With anything accepted, every
+    row of this process is reranked and its bindings renumbered from
+    ``plan(new_recipients, own_order)``, then the transaction commits: the only
+    durable boundary. Returns ``accepted`` (recipients), ``new``, ``outcomes``
+    ``{lane: (outcome, reason)}``, ``order`` and ``inherited``.
+    """
+    pid, key = current_identity()
+    stamp = _iso(now_fn())
+    asked: dict[tuple, str] = {}
+
+    def probe(pid_: int, key_: Optional[str]) -> str:
+        if asked.get((pid_, key_), DEAD) == DEAD:  # re-ask a grant, reuse a refusal
+            asked[(pid_, key_)] = instance_state(pid_, key_)
+        return asked[(pid_, key_)]
+
+    accepted, new, outcomes, inherited = [], [], {}, {}
+    order: list[tuple[str, int]] = []
+    with closing(_connect(_resolve_db(db_path))) as conn:
+        with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if attribution(thread) != thread:
+                conn.rollback()
+                return {"stopped": True, "accepted": [], "new": [], "outcomes": {}}
+            bindings.ensure(conn)
+            for c in candidates:
+                lane = c["lane"]
+                if c["new"] and free <= 0:
+                    outcomes[lane] = ("cap", "this session holds or awaits as many names as it may")
+                    continue
+                conn.execute("SAVEPOINT candidate")
+                reason = _restore_one(conn, c, thread, pid, key, probe)
+                if reason is None and c["kind"] == "acquire":
+                    if not accepted and key is not None:
+                        conn.execute(
+                            "DELETE FROM agent_sessions WHERE pid = ? AND process_key IS NOT ?",
+                            (pid, key),
+                        )
+                    inherited[lane] = _unread_for(conn, lane)
+                    conn.execute("DELETE FROM agent_sessions WHERE lane = ? AND pid != ?", (lane, pid))
+                    _upsert(
+                        conn, pid=pid, lane=lane, agent=agent, label=lane.split(":", 1)[1],
+                        key=key, cwd=str(Path.cwd()), stamp=stamp,
+                        host_pid=host_pid, host_key=host_key,
+                    )
+                if reason is None and conn.execute(
+                    "UPDATE thread_names SET pid = ?, process_key = ?, bound_at = ?"
+                    " WHERE lane = ? AND thread = ? AND seq = ?",
+                    (pid, key, stamp, lane, thread, c["seq"]),
+                ).rowcount != 1:
+                    reason = ("changed", "its binding changed while being restored")
+                if reason is not None:
+                    conn.execute("ROLLBACK TO candidate")
+                    conn.execute("RELEASE candidate")
+                    outcomes[lane] = reason
+                    continue
+                conn.execute("RELEASE candidate")
+                outcomes[lane] = ("restored", None)
+                accepted.append(lane)
+                if c["new"]:
+                    new.append(lane)
+                    free -= 1
+            if not accepted:
+                conn.rollback()
+                return {"stopped": False, "accepted": [], "new": [], "outcomes": outcomes}
+            order = bindings.own_order(conn, thread=thread, pid=pid, key=key)
+            final = list(plan(new, order))
+            rerank(conn, pid=pid, key=key, order=final)
+            bindings.renumber(conn, thread=thread, pid=pid, key=key, order=final)
+    return {
+        "stopped": False,
+        "accepted": accepted,
+        "new": new,
+        "outcomes": outcomes,
+        "order": order,
+        "inherited": inherited,
+    }
+
+
+def _restore_one(conn, c: dict, thread: str, pid: int, key, probe) -> Optional[tuple]:
+    """Why candidate ``c`` cannot be restored now, or None. No writes."""
+    row = conn.execute(
+        "SELECT lane, thread, seq, pid, process_key FROM thread_names WHERE lane = ?",
+        (c["lane"],),
+    ).fetchone()
+    snapshot = (c["lane"], c["thread"], c["seq"], c["pid"], c["process_key"])
+    if row is None or tuple(row) != snapshot:
+        return ("changed", "its binding changed while being restored")
+    if (c["pid"], c["process_key"]) != (pid, key):
+        state = probe(c["pid"], c["process_key"])
+        if state != DEAD:
+            return ("blocked", f"writer {state} (pid {c['pid']})")
+    if c["kind"] == "acquire":
+        refusal = _refusal(conn, c["lane"], pid, probe)
+        if refusal:
+            return ("blocked", refusal["error"])
+    return None
 
 
 def _upsert(
@@ -392,9 +597,14 @@ def _acquire(
     host_pid,
     host_key,
     ranked: bool = False,
+    binding=None,
 ) -> dict:
     pid = os.getpid() if pid is None else pid
     requested = tuple(dict.fromkeys(lanes))
+    # ``binding`` settles the primary lane's thread binding in this
+    # transaction: ("bind", thread) for a claim attributed to a pinned Codex
+    # thread, "unbind" for any other explicit claim. None - every automatic
+    # grant - leaves bindings alone (``bindings``).
     # ``ranked``: ``lanes`` is everything this process holds, oldest first, so
     # each row's ``seq`` is written from its place in it. Otherwise a row keeps
     # its seq and a new one goes last - which put a derived lane granted after a
@@ -469,11 +679,21 @@ def _acquire(
                     seq=rank.get(lane),
                 )
                 accepted.append(lane)
+            bound = False
+            if binding is not None and primary in accepted:
+                if binding == "unbind" or key is None:
+                    bindings.unbind_lane(conn, primary)
+                else:
+                    thread = binding[1]
+                    bindings.bind(conn, lane=primary, thread=thread, pid=pid, key=key, stamp=stamp)
+                    bindings.renumber(conn, thread=thread, pid=pid, key=key, order=requested)
+                    bound = True
     return {
         "ok": True,
         "agent": agent,
         "label": label,
         "pid": pid,
+        "bound_to_thread": bound,
         # The lane asked for, whose backlog `inherited_unread` counts; a
         # retained lane can come after it.
         "lane": primary if primary in accepted else (accepted[-1] if accepted else None),
@@ -621,12 +841,15 @@ def claim(
     db_path: Optional[Path] = None,
     now_fn: Callable[[], datetime] = _default_now,
     ranked: bool = False,
+    binding=None,
 ) -> dict:
     """Acquire the named role and retained lanes together, or change nothing.
 
     A successful claimant inherits unread mail already addressed to the role.
     Live or unprobeable holders and outstanding work prevent a takeover.
     ``ranked`` as for ``register``, with the role last unless already held.
+    ``binding`` settles the role's thread binding (``_acquire``); retained
+    lanes re-acquired with it are left as they are.
     """
     lane = f"{agent}:{label}"
     return _acquire(
@@ -642,6 +865,7 @@ def claim(
         host_key=host_key,
         atomic=True,
         ranked=ranked,
+        binding=binding,
     )
 
 
