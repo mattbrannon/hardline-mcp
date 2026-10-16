@@ -4483,5 +4483,53 @@
     "tests": [
       "tests/test_watched_runs.py::test_a_claude_result_that_came_before_the_stop_is_the_answer"
     ]
+  },
+  "reply-address-is-the-senders-lane": {
+    "file": "hardline_mcp/server.py",
+    "before": "        sender, sender_note = _reply_address(from_agent)\n",
+    "after": "        sender, sender_note = from_agent, None\n",
+    "tests": [
+      "tests/test_reply_address.py::test_a_bare_sender_naming_this_session_is_sent_as_its_lane"
+    ]
+  },
+  "reply-address-only-for-this-sessions-own-agent": {
+    "file": "hardline_mcp/server.py",
+    "before": "    if \":\" in from_agent or not agent or from_agent != adapters.base_agent(agent):\n",
+    "after": "    if \":\" in from_agent or not agent:\n",
+    "tests": [
+      "tests/test_reply_address.py::test_any_other_sender_is_kept_as_given"
+    ]
+  },
+  "reply-address-keeps-a-qualified-sender": {
+    "file": "hardline_mcp/server.py",
+    "before": "    if \":\" in from_agent or not agent or from_agent != adapters.base_agent(agent):\n",
+    "after": "    if not agent or adapters.base_agent(from_agent) != adapters.base_agent(agent):\n",
+    "tests": [
+      "tests/test_reply_address.py::test_any_other_sender_is_kept_as_given"
+    ]
+  },
+  "bare-recipient-is-said-to-be-shared": {
+    "file": "hardline_mcp/server.py",
+    "before": "        if not live:\n            return None\n        return (\n",
+    "after": "        if True:\n            return None\n        return (\n",
+    "tests": [
+      "tests/test_reply_address.py::test_a_send_to_a_bare_name_says_it_is_shared_and_who_to_address"
+    ]
+  },
+  "reply-address-needs-a-granted-lane": {
+    "file": "hardline_mcp/server.py",
+    "before": "        granted = \":\" in lane and bool(sessions.granted([lane]))\n",
+    "after": "        granted = \":\" in lane\n",
+    "tests": [
+      "tests/test_reply_address.py::test_a_lane_this_process_is_refused_is_not_given_as_the_reply_address"
+    ]
+  },
+  "delivery-notice-names-the-stored-sender": {
+    "file": "hardline_mcp/server.py",
+    "before": "new message #{result['message_id']} from {sender}. ",
+    "after": "new message #{result['message_id']} from {from_agent}. ",
+    "tests": [
+      "tests/test_reply_address.py::test_the_delivery_notice_names_the_stored_sender"
+    ]
   }
 }
