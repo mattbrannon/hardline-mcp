@@ -11,8 +11,9 @@ Advice only, by design. A hint claims nothing, routes nothing and reads no
 mail; every grant still goes through the one ownership rule. So a stale hint
 costs a suggestion, never a name: a hint an older revision never cleared, a
 second window on the same transcript, a name claimed weeks ago in another
-context. Restoring names automatically was reviewed and rejected - see
-docs/session-continuity.md.
+context. Restoring a conversation's names from hints was reviewed and
+rejected - see docs/session-continuity.md. A Codex thread's names are
+restored, from a record of their own (``bindings``), not from these.
 
 Keyed by the full conversation id (``CLAUDE_CODE_SESSION_ID``), so a fork,
 which gets a new id, inherits nothing. Written after a grant, replaced by the
