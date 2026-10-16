@@ -4486,8 +4486,8 @@
   },
   "reply-address-is-the-senders-lane": {
     "file": "hardline_mcp/server.py",
-    "before": "    sender = _reply_address(from_agent)\n",
-    "after": "    sender = from_agent\n",
+    "before": "        sender, sender_note = _reply_address(from_agent)\n",
+    "after": "        sender, sender_note = from_agent, None\n",
     "tests": [
       "tests/test_reply_address.py::test_a_bare_sender_naming_this_session_is_sent_as_its_lane"
     ]
@@ -4514,6 +4514,22 @@
     "after": "        if True:\n            return None\n        return (\n",
     "tests": [
       "tests/test_reply_address.py::test_a_send_to_a_bare_name_says_it_is_shared_and_who_to_address"
+    ]
+  },
+  "reply-address-needs-a-granted-lane": {
+    "file": "hardline_mcp/server.py",
+    "before": "        granted = \":\" in lane and bool(sessions.granted([lane]))\n",
+    "after": "        granted = \":\" in lane\n",
+    "tests": [
+      "tests/test_reply_address.py::test_a_lane_this_process_is_refused_is_not_given_as_the_reply_address"
+    ]
+  },
+  "delivery-notice-names-the-stored-sender": {
+    "file": "hardline_mcp/server.py",
+    "before": "new message #{result['message_id']} from {sender}. ",
+    "after": "new message #{result['message_id']} from {from_agent}. ",
+    "tests": [
+      "tests/test_reply_address.py::test_the_delivery_notice_names_the_stored_sender"
     ]
   }
 }

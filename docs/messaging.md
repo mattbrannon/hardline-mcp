@@ -23,13 +23,16 @@ acknowledge the message for everyone. A qualified recipient such as
 accidental consumption across sessions; identities are self-declared and all
 processes share the same OS user and database access.
 
-No session is woken for shared mail; wakes announce a session's own lanes. So
-`send` to a bare name warns, listing the registered sessions to address
-instead. A sender is where replies go, so a `from_agent` that is the bare name
-of the sending session's own agent is recorded as that session's lane (the
-response's `from_agent` says so). Without that, a Codex session sending as
-`codex` received its replies only while it happened to poll the shared inbox,
-and lost them once it went idle.
+Automatic inbox, queue and channel wakes announce a session's own lanes, not
+shared mail; only an explicitly armed watcher (`watch`) includes it. So `send`
+to a bare name warns, listing the registered sessions to address instead. A
+sender is where replies go, so a `from_agent` that is the bare name of the
+sending session's own agent is recorded as that session's lane, when this
+process holds the lane's grant (the response's `from_agent` and `sender_note`
+say so; without a granted lane the bare name is kept, and the note says why).
+Without that, a Codex session sending as `codex` received its replies only
+while it happened to poll the shared inbox, and lost them once it went idle. A
+claimed name can change hands later, and a reply goes to whoever holds it then.
 
 `send` persists even when a recipient has no registered holder. That warning is
 not proof that nobody can read the mail: an older server or failed registration

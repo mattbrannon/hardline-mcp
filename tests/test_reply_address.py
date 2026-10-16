@@ -55,6 +55,39 @@ async def test_a_session_without_a_lane_keeps_its_bare_name(monkeypatch, tmp_pat
 
 
 @pytest.mark.anyio
+async def test_a_lane_this_process_is_refused_is_not_given_as_the_reply_address(
+    monkeypatch, tmp_path
+):
+    """Another live process holds codex:me, so this one's derived lane is not
+    granted: a reply there would reach that process, so the sender stays bare."""
+    import subprocess
+    import sys
+
+    db = tmp_path / "mb.db"
+    monkeypatch.setenv("HARDLINE_DB", str(db))
+    monkeypatch.setenv("HARDLINE_AGENT", "codex")
+    monkeypatch.setenv("HARDLINE_AGENT_LABEL", "me")
+    holder = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"], stdin=subprocess.PIPE)
+    try:
+        sessions.register(agent="codex", lane="codex:me", pid=holder.pid, db_path=db)
+        server._announce_self("codex")  # refused: contested
+        got = await server.send(from_agent="codex", to_agent="claude:peer", message="hi")
+    finally:
+        holder.kill()
+        holder.wait()
+    assert _stored_sender(db, got) == "codex"
+    assert "holds no lane" in got.get("sender_note", ""), got
+
+
+@pytest.mark.anyio
+async def test_the_delivery_notice_names_the_stored_sender(codex_me, monkeypatch):
+    notices = []
+    monkeypatch.setattr(server.adapters, "deliver", lambda agent, text: notices.append(text) or {"ok": True})
+    await server.send(from_agent="codex", to_agent="claude:peer", message="hi", deliver=True)
+    assert notices and "from codex:me." in notices[0], notices
+
+
+@pytest.mark.anyio
 async def test_a_send_to_a_bare_name_says_it_is_shared_and_who_to_address(codex_me):
     got = await server.send(from_agent="claude:peer", to_agent="codex", message="hi")
     assert got.get("ok") is True

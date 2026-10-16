@@ -788,20 +788,37 @@ def _register_locked(
     return response
 
 
-def _reply_address(from_agent: str) -> str:
-    """Where a reply to this message should go: ``from_agent`` as given, unless
-    it is the bare name of the agent this session is, in which case this
-    session's own lane, chosen as an async result's is (``_result_lane``).
+def _reply_address(from_agent: str) -> tuple[str, str | None]:
+    """``(sender, note)``: where a reply to this message should go.
 
-    A sender that is the bare agent makes the shared mailbox the reply address,
-    and no session is woken for shared mail: a Codex session that sent as
-    ``codex`` got its replies only while it happened to poll the bare inbox,
-    and lost them once it went idle. Any other sender is kept as given."""
+    ``from_agent`` as given, unless it is the bare name of the agent this
+    session is: then this session's own lane, chosen as an async result's is
+    (``_result_lane``) and used only if this process holds its grant now. A
+    bare sender makes the shared mailbox the reply address, which automatic
+    wakes do not announce: a Codex session that sent as ``codex`` got its
+    replies only while it happened to poll the shared inbox, and lost them
+    once it went idle. A session with no granted lane keeps the bare name, and
+    is told. Caller holds ``_identity_lock``, so no claim or release lands
+    between the choice and the write."""
     agent = adapters.self_agent()
     if ":" in from_agent or not agent or from_agent != adapters.base_agent(agent):
-        return from_agent
-    lane = _result_lane(agent)
-    return lane if ":" in lane else from_agent
+        return from_agent, None
+    try:
+        lane = _result_lane(agent)
+        granted = ":" in lane and bool(sessions.granted([lane]))
+    except Exception:  # noqa: BLE001 - never fail a send over choosing its sender
+        granted = False
+    if granted:
+        return lane, (
+            f"Sent as {lane!r}, the lane this session holds, so a reply is addressed to "
+            f"it rather than to shared {from_agent!r}. A claimed name can change hands "
+            "later; a reply goes to whoever holds it then."
+        )
+    return from_agent, (
+        f"Sent as bare {from_agent!r}: this session holds no lane to give as its reply "
+        "address, so a reply goes to the shared mailbox, which automatic wakes do not "
+        "announce."
+    )
 
 
 def _lane_advice(to_agent: str) -> str | None:
@@ -820,9 +837,10 @@ def _lane_advice(to_agent: str) -> str | None:
             return None
         return (
             f"{to_agent!r} is the shared mailbox: any {to_agent} session may consume "
-            "it, and none is woken for it. To reach one session, address its lane: "
-            + ", ".join(live)
-            + ". A reply to a message sent from a bare name comes here too."
+            "it. Automatic inbox, queue and channel wakes do not announce shared mail "
+            "(an explicitly armed watcher may). To reach one session, address its "
+            "lane: " + ", ".join(live)
+            + ". A reply to a message whose stored sender is bare comes here too."
         )
     try:
         if sessions.holders(to_agent):
@@ -859,15 +877,14 @@ def _send_impl(from_agent: str, to_agent: str, message: str, deliver: bool) -> d
             "error": f"unknown agent(s) {unknown}; known: {sorted(known)}",
         }
 
-    sender = _reply_address(from_agent)
-    result = mailbox.send(sender, to_agent, message)
+    with _identity_lock:
+        sender, sender_note = _reply_address(from_agent)
+        result = mailbox.send(sender, to_agent, message)
     result["ok"] = True
     if sender != from_agent:
         result["from_agent"] = sender
-        result["sender_note"] = (
-            f"Sent as {sender!r}, this session's own lane, so a reply reaches this "
-            f"session. Bare {from_agent!r} is shared mail, which no session is woken for."
-        )
+    if sender_note:
+        result["sender_note"] = sender_note
     # The base-name guard above catches "clod:x" but not "codex:typo": any lane
     # is accepted after a valid agent, which is the same silent black hole one
     # level down. The registry can finally tell the difference.
@@ -884,7 +901,7 @@ def _send_impl(from_agent: str, to_agent: str, message: str, deliver: bool) -> d
         result["recipient_delivery"] = _delivery_of(holders)
     if deliver:
         notice = (
-            f"[hardline] new message #{result['message_id']} from {from_agent}. "
+            f"[hardline] new message #{result['message_id']} from {sender}. "
             f"Call hardline-mcp inbox(agent='{to_agent}') to read it."
         )
         # Push to the CLI behind the lane, not the lane name: adapters.deliver
