@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 import queue
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -26,12 +27,28 @@ import time
 import xml.etree.ElementTree as ET
 
 _CAUGHT = ("assert ", "AssertionError", "Failed: DID NOT RAISE")
+_LEFT: list[str] = []  # every temporary tree made, to report any cleanup left
+
+
+def _kill_tree(pid: int) -> None:
+    """A timed-out run's tree, as far as it reaches. Killing pytest alone left
+    a test's own child running - forever, when the mutation removed what ends
+    it - holding the temporary tree open. Best effort: a descendant in a
+    session of its own (as every agent _run_cmd spawns is) is outside
+    pytest's group, which is why the drain after this is bounded."""
+    with contextlib.suppress(Exception):
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True, timeout=30
+            )
+        else:
+            os.killpg(pid, signal.SIGKILL)  # its own session, so its own group
 
 
 def _test(root: Path, selectors: list[str], timeout: int = 120) -> tuple[int, dict, str]:
     report = root / "mutation-results.xml"
     report.unlink(missing_ok=True)
-    run = subprocess.run(
+    proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
@@ -52,12 +69,22 @@ def _test(root: Path, selectors: list[str], timeout: int = 120) -> tuple[int, di
             "PYTEST_ADDOPTS": "",
             "HARDLINE_DB": str(root / "mutation.db"),
         },
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=timeout,
+        start_new_session=True,
     )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc.pid)
+        # Bounded: a survivor still holding pytest's output would keep an
+        # unbounded drain waiting on it.
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            proc.communicate(timeout=30)
+        raise
     cases = {}
     if report.exists():
         for case in ET.parse(report).iter("testcase"):
@@ -67,7 +94,7 @@ def _test(root: Path, selectors: list[str], timeout: int = 120) -> tuple[int, di
                 for child in case
                 if child.tag in {"failure", "error", "skipped"}
             ]
-    return run.returncode, cases, run.stdout + run.stderr
+    return proc.returncode, cases, stdout + stderr
 
 
 def _selects(selector: str, key: tuple[str, str]) -> bool:
@@ -82,8 +109,12 @@ def _selects(selector: str, key: tuple[str, str]) -> bool:
 
 @contextlib.contextmanager
 def _tree(source: Path):
-    """A disposable copy of the source tree."""
-    with tempfile.TemporaryDirectory(prefix="hardline-mutation-") as directory:
+    """A disposable copy of the source tree. A file still held open at the end
+    (Windows) is left behind rather than losing every result reported after."""
+    with tempfile.TemporaryDirectory(
+        prefix="hardline-mutation-", ignore_cleanup_errors=True
+    ) as directory:
+        _LEFT.append(directory)  # checked after cleanup, and reported if it stayed
         # Resolved: on macOS the temp dir is /var/..., a symlink to
         # /private/var/..., and pytest names tests from the resolved path, so
         # an unresolved --rootdir made every junit name miss its selector.
@@ -210,6 +241,10 @@ def main() -> int:
                     print(f"CAUGHT {name}", flush=True)
     for name in sorted(failures):
         print(f"ERROR {name}: {failures[name]}", flush=True)
+    for directory in _LEFT:
+        if Path(directory).exists():
+            # Held open by something a timed-out case left running.
+            print(f"WARNING could not remove {directory}", flush=True)
     print(
         f"{len(selected) - len(failures)} caught, {len(failures)} not, of {len(selected)}"
         f" in {time.monotonic() - started:.0f}s with {jobs} jobs",

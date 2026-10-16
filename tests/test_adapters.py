@@ -1358,7 +1358,8 @@ def test_ask_claude_routes_model_and_effort(monkeypatch, effort):
     assert argv[argv.index("--output-format") + 1] == "stream-json"
     assert "--verbose" in argv
     assert argv[-1] == "review this"
-    assert calls[0]["kwargs"]["timeout"] == 900
+    # A streaming run: the long ceiling, judged by silence (_run_cmd's idle_s).
+    assert calls[0]["kwargs"]["timeout"] == adapters._STREAMING_TIMEOUT_S
 
 
 def test_ask_claude_default_effort_omits_flag(monkeypatch):
@@ -1818,7 +1819,7 @@ def test_run_timing_survives_the_jsonl_parse(monkeypatch):
     _capture_run(monkeypatch, _FakeCompleted(stdout='{"type":"result"}'))
     optioned = adapters.ask_claude("go", effort="high")
     assert isinstance(optioned["elapsed_s"], float)
-    assert optioned["timeout_s"] == adapters._CLAUDE_TIMEOUT_S
+    assert optioned["timeout_s"] == adapters._STREAMING_TIMEOUT_S
 
     _capture_run(monkeypatch, _FakeCompleted(stdout="ok"))
     plain = adapters.ask_claude("go")
@@ -1831,6 +1832,26 @@ def test_run_timing_survives_the_jsonl_parse(monkeypatch):
     assert codex["timeout_s"] == adapters._CODEX_TIMEOUT_S
 
 
+def test_structured_runs_are_watched_and_the_plain_one_is_not(monkeypatch):
+    """Both structured paths stream progress, so they are judged by silence;
+    the plain `claude -p` prints only at the end and keeps its wall clock."""
+    seen = []
+    real = adapters._run_agent_cmd
+
+    def spy(agent, argv, **kw):
+        seen.append((agent, kw.get("streaming", False)))
+        return real(agent, argv, **kw)
+
+    monkeypatch.setattr(adapters, "_run_agent_cmd", spy)
+    _capture_run(monkeypatch, _FakeCompleted(stdout='{"type":"result"}'))
+    adapters.ask_claude("go", effort="high")
+    _capture_run(monkeypatch, _FakeCompleted(stdout='{"type":"item.completed"}'))
+    adapters.ask_codex("go", effort="high")
+    _capture_run(monkeypatch, _FakeCompleted(stdout="ok"))
+    adapters.ask_claude("go")
+    assert seen == [("claude", True), ("codex", True), ("claude", False)]
+
+
 def test_a_parsers_own_timing_is_not_clobbered(monkeypatch):
     """If a parser ever reports timing from the stream itself, that is the
     more precise number and must win over the process-level one."""
@@ -1840,7 +1861,7 @@ def test_a_parsers_own_timing_is_not_clobbered(monkeypatch):
     )
     out = adapters.ask_claude("go", effort="high")
     assert out["elapsed_s"] == 1.5  # not overwritten by the run's own value
-    assert out["timeout_s"] == adapters._CLAUDE_TIMEOUT_S  # ...but this filled in
+    assert out["timeout_s"] == adapters._STREAMING_TIMEOUT_S  # ...but this filled in
 
 
 def test_spawned_agents_never_inherit_the_write_opt_in(
