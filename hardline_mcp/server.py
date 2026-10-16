@@ -788,14 +788,42 @@ def _register_locked(
     return response
 
 
+def _reply_address(from_agent: str) -> str:
+    """Where a reply to this message should go: ``from_agent`` as given, unless
+    it is the bare name of the agent this session is, in which case this
+    session's own lane, chosen as an async result's is (``_result_lane``).
+
+    A sender that is the bare agent makes the shared mailbox the reply address,
+    and no session is woken for shared mail: a Codex session that sent as
+    ``codex`` got its replies only while it happened to poll the bare inbox,
+    and lost them once it went idle. Any other sender is kept as given."""
+    agent = adapters.self_agent()
+    if ":" in from_agent or not agent or from_agent != adapters.base_agent(agent):
+        return from_agent
+    lane = _result_lane(agent)
+    return lane if ":" in lane else from_agent
+
+
 def _lane_advice(to_agent: str) -> str | None:
     """Report missing registered holders without rejecting durable mail.
 
     A returning holder or later successful claimant can consume the backlog.
     Missing registration is not proof of death and does not grant ownership.
+    A bare name is shared: say so, and which sessions could be addressed instead.
     """
     if ":" not in to_agent:
-        return None
+        try:
+            live = sorted(s["lane"] for s in sessions.live(agent=to_agent))
+        except Exception:  # noqa: BLE001 - never fail a send over discovery
+            return None
+        if not live:
+            return None
+        return (
+            f"{to_agent!r} is the shared mailbox: any {to_agent} session may consume "
+            "it, and none is woken for it. To reach one session, address its lane: "
+            + ", ".join(live)
+            + ". A reply to a message sent from a bare name comes here too."
+        )
     try:
         if sessions.holders(to_agent):
             return None
@@ -831,8 +859,15 @@ def _send_impl(from_agent: str, to_agent: str, message: str, deliver: bool) -> d
             "error": f"unknown agent(s) {unknown}; known: {sorted(known)}",
         }
 
-    result = mailbox.send(from_agent, to_agent, message)
+    sender = _reply_address(from_agent)
+    result = mailbox.send(sender, to_agent, message)
     result["ok"] = True
+    if sender != from_agent:
+        result["from_agent"] = sender
+        result["sender_note"] = (
+            f"Sent as {sender!r}, this session's own lane, so a reply reaches this "
+            f"session. Bare {from_agent!r} is shared mail, which no session is woken for."
+        )
     # The base-name guard above catches "clod:x" but not "codex:typo": any lane
     # is accepted after a valid agent, which is the same silent black hole one
     # level down. The registry can finally tell the difference.
