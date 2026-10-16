@@ -94,6 +94,18 @@ def _grandchild_pid(out: dict) -> int:
     return int(text.split("grandchild", 1)[1].split()[0])
 
 
+def _dies(pid: int, within: float = 10.0) -> bool:
+    """Linux closes a killed process's descriptors (our pipes' EOF) before it
+    becomes a zombie, so the call can return while the process is still in
+    exit: wait for it rather than sample once."""
+    deadline = time.monotonic() + within
+    while procid.instance_state(pid, None) != procid.DEAD:
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.05)
+    return True
+
+
 def test_limits_hold_over_a_grandchild_left_holding_the_pipes():
     """The launcher exits; what it left keeps the output open and says nothing.
     The run still ends at the idle limit instead of waiting on the grandchild."""
@@ -106,7 +118,7 @@ def test_limits_hold_over_a_grandchild_left_holding_the_pipes():
         # Its group is addressed directly, so it is reached after the launcher
         # is gone. On Windows nothing reaches an orphan by its exited parent,
         # and the result says what could not be captured.
-        assert procid.instance_state(_grandchild_pid(out), None) == procid.DEAD
+        assert _dies(_grandchild_pid(out))
     else:
         assert out.get("capture_incomplete") is True
 
@@ -118,7 +130,7 @@ def test_a_limit_kills_the_tree_and_drains_it():
     out = adapters._run_cmd(_child(code), timeout_s=2, idle_s=60)
     assert out.get("timeout_kind") == "ceiling", out
     assert "capture_incomplete" not in out, "a descendant outlived the kill"
-    assert procid.instance_state(_grandchild_pid(out), None) == procid.DEAD
+    assert _dies(_grandchild_pid(out))
 
 
 def test_a_pipe_is_drained_before_it_is_closed(monkeypatch):
