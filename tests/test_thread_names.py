@@ -172,6 +172,30 @@ async def test_a_dismissal_of_an_unheld_name_unbinds_it_and_says_so(wake, store)
 
 
 @pytest.mark.anyio
+async def test_cancelling_a_waiting_claim_withdraws_it_from_the_thread(wake, store, live):
+    sessions.register(agent="codex", lane="codex:role", pid=live[0], db_path=store)
+    bind(store, "codex:role", 1)
+    assert adapters.await_lane("role", "codex", THREAD) is None
+    got = await server.release_session(label="role")
+    assert got.get("cancelled") == "codex:role" and got.get("unbound") == "codex:role", got
+    assert "codex:role" not in rows(store)
+
+
+@pytest.mark.anyio
+async def test_a_failed_derived_release_keeps_the_claim(wake, store, monkeypatch):
+    monkeypatch.setenv("HARDLINE_AGENT_LABEL", "pinned")
+    assert (await server.register_session(label="pinned", ctx=ctx()))["ok"]
+
+    def broken(*a, **k):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(sessions, "release_derived", broken)
+    with pytest.raises(Exception):
+        await server.release_session(label="pinned")
+    assert adapters.claimed_lanes() == ("pinned",)
+
+
+@pytest.mark.anyio
 async def test_releasing_a_claimed_derived_name_keeps_the_lane_at_its_place(
     wake, store, monkeypatch
 ):
@@ -311,6 +335,145 @@ def test_a_full_session_still_adopts_a_name_it_already_holds(wake, store):
     assert server._restoration["outcomes"]["codex:b"][0] == "cap"
 
 
+def test_a_held_but_contested_name_is_not_adopted(wake, store, monkeypatch, live):
+    """Held here is memory, not a grant: a live holder in the registry blocks."""
+    monkeypatch.setenv("HARDLINE_AGENT_LABEL", "d")
+    bind(store, "codex:d", 1)
+    sessions.register(agent="codex", lane="codex:d", pid=live[0], db_path=store)
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ()
+    assert server._restoration["outcomes"]["codex:d"][0] == "blocked"
+    found = sessions.survey(
+        THREAD, "codex:", before=None, limit=8, listed=(), held=("codex:d",), pending=(),
+        db_path=store,
+    )
+    assert found[0]["outcome"] == "blocked", "the survey adopted a contested lane"
+    adopt = {**_candidate("codex:d", 1), "kind": "adopt"}
+    assert _restore([adopt], store)["outcomes"]["codex:d"][0] == "blocked"
+
+
+def test_adopting_a_held_name_takes_its_registry_grant_too(wake, store, monkeypatch):
+    """Held here, with no registry row: restored means granted, or the wake
+    (which reads granted lanes) would never announce its mail."""
+    monkeypatch.setenv("HARDLINE_AGENT_LABEL", "d")
+    bind(store, "codex:d", 1)
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ("d",)
+    assert [h["pid"] for h in sessions.holders("codex:d", db_path=store)] == [me()[0]]
+
+
+def test_this_processs_unlisted_derived_binding_is_adopted(wake, store, monkeypatch):
+    """Its own binding of its derived name, never adopted into the list (a
+    failure after the commit): the next attempt adopts it."""
+    monkeypatch.setenv("HARDLINE_AGENT_LABEL", "d")
+    server._announce_self("codex")
+    bind(store, "codex:d", 1, pid=me()[0], key=me()[1])
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ("d",)
+
+
+@pytest.mark.anyio
+async def test_the_order_restored_is_the_order_the_next_server_restores(wake, store):
+    """E claimed here, R restored below it: renumbered so the next server
+    answers to E too, not to R's older, higher place."""
+    assert (await server.register_session(label="e", ctx=ctx()))["ok"]
+    bind(store, "codex:r", 5)
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ("r", "e") and adapters.lane_suffix() == "e"
+    _restart(store)
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ("r", "e") and adapters.lane_suffix() == "e"
+
+
+def test_a_candidate_refused_after_its_writes_is_rolled_back_alone(wake, store):
+    """B's binding update is refused after B's registry row was written: B's
+    savepoint undoes that row, and A, accepted before it, stays."""
+    bind(store, "codex:a", 2)
+    bind(store, "codex:b", 1)
+    with closing(sqlite3.connect(store)) as raw, raw:
+        raw.execute(
+            "CREATE TRIGGER refuse_b BEFORE UPDATE ON thread_names WHEN OLD.lane = 'codex:b'"
+            " BEGIN SELECT RAISE(IGNORE); END"
+        )
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ("a",)
+    assert server._restoration["outcomes"]["codex:b"][0] == "changed"
+    assert not sessions.holders("codex:b", db_path=store), "B's registry row survived"
+    assert sessions.holders("codex:a", db_path=store)
+
+
+def test_a_dispatch_racing_a_claim_never_goes_to_the_lane_the_claim_replaces(
+    wake, store, monkeypatch
+):
+    """The claim is durable but not yet published when the dispatch chooses
+    its recipient: the dispatch is refused, not sent to the lane being left."""
+    import threading
+
+    durable, go = threading.Event(), threading.Event()
+    claim = sessions.claim
+
+    def paused(**kw):
+        got = claim(**kw)
+        durable.set()
+        assert go.wait(30)
+        return got
+
+    monkeypatch.setattr(sessions, "claim", paused)
+    claimer = threading.Thread(
+        target=server._register_session_impl, args=("r", None, False, THREAD)
+    )
+    claimer.start()
+    try:
+        assert durable.wait(30)
+        raced = _admit()
+    finally:
+        go.set()
+        claimer.join(30)
+    assert raced.get("accepted") is False and raced.get("retryable") is True, raced
+    assert [n["lane"] for n in raced.get("unheld_names", [])] == ["codex:r"]
+    after = _admit()
+    assert after.get("accepted") is True and after.get("lane") == "codex:r", after
+
+
+def test_a_restoration_whose_local_half_was_lost_is_repaired(wake, store):
+    """Committed, then the process forgot it (failure after commit): the next
+    attempt finds this process's own row unheld and claims it again."""
+    bind(store, "codex:a", 1)
+    server._restore_pending()
+    adapters.reset_claimed_lanes()
+    server._restoration.update(outcomes={}, cursor=None, seen=set())
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ("a",)
+
+
+def test_more_than_a_page_of_names_comes_back_over_two_attempts(wake, store):
+    for seq in range(1, server._RESTORE_PAGE + 2):
+        bind(store, f"codex:n{seq}", seq)
+    server._restore_pending()
+    assert len(adapters.claimed_lanes()) == server._RESTORE_PAGE
+    server._restore_pending()
+    assert len(adapters.claimed_lanes()) == server._RESTORE_PAGE + 1
+    assert adapters.lane_suffix() == f"n{server._RESTORE_PAGE + 1}", "newest is the address"
+
+
+def test_restoration_declares_codex_when_nothing_else_did(wake, store, monkeypatch):
+    """A Codex server not told its agent learns it from what it restored, so
+    the names it holds are ones it reads."""
+    monkeypatch.delenv("HARDLINE_AGENT")
+    assert adapters.self_agent() is None
+    bind(store, "codex:a", 1)
+    server._restore_pending()
+    assert adapters.self_agent() == "codex"
+    assert "codex:a" in adapters.owned_recipients()
+
+
+@pytest.mark.anyio
+async def test_a_claim_is_placed_above_another_writers_names_on_the_thread(wake, store):
+    bind(store, "codex:old", 2)
+    assert (await server.register_session(label="role", ctx=ctx()))["ok"]
+    assert rows(store)["codex:role"][1] == 3
+
+
 def test_a_failing_stage_does_not_starve_restoration(wake, store, monkeypatch):
     bind(store, "codex:a", 1)
 
@@ -402,11 +565,32 @@ async def test_claims_and_jobs_publish_under_the_identity_lock(wake, store, monk
         seen.append(("job", server._identity_lock.locked()))
         return create(**kw)
 
+    result_lane = server._result_lane
+
+    def choosing(agent):
+        seen.append(("recipient", server._identity_lock.locked()))
+        return result_lane(agent)
+
     monkeypatch.setattr(adapters, "claim_lane", claiming)
     monkeypatch.setattr(jobs, "create", creating)
+    monkeypatch.setattr(server, "_result_lane", choosing)
     assert (await server.register_session(label="mine", ctx=ctx()))["ok"]
     assert _admit().get("accepted") is True
-    assert seen == [("claim", True), ("job", True)], seen
+    assert seen == [("claim", True), ("recipient", True), ("job", True)], seen
+
+
+def test_a_fulfilled_claim_is_bound_as_its_request_was(wake, store, monkeypatch):
+    """A waiting claim carries its request's thread to the moment it is granted."""
+    claim_lane = adapters.claim_lane
+    locked = []
+    monkeypatch.setattr(
+        adapters, "claim_lane",
+        lambda label: locked.append(server._identity_lock.locked()) or claim_lane(label),
+    )
+    assert adapters.await_lane("role", "codex", THREAD) is None
+    assert server._fulfil_pending() == ["codex:role"]
+    assert rows(store).get("codex:role", ())[:1] == (THREAD,)
+    assert locked == [True]
 
 
 def _restart(store):
@@ -441,6 +625,24 @@ async def test_a_result_dispatched_after_a_restart_is_read_after_the_next(wake, 
     read = await server.inbox(agent="codex")
     bodies = [m.get("body", "") for m in read.get("messages", [])]
     assert any(receipt["job_id"] in body for body in bodies), read
+
+
+@pytest.mark.anyio
+async def test_a_job_whose_server_died_is_lost_not_announced_after_the_restart(
+    wake, store, monkeypatch
+):
+    """The other variant: S1 exits before the job finishes. S2 gets the name
+    back, the job reads lost, and no completion notice exists to read."""
+    bind(store, "codex:r", 1)
+    with monkeypatch.context() as as_s1:
+        as_s1.setattr(jobs, "current_identity", lambda: (GONE, "gone"))  # S1, now dead
+        job = jobs.create(agent="codex", requester="codex:r", label=None, request={}, db_path=store)
+        jobs.mark_running(job, db_path=store)
+    server._restore_pending()  # S2
+    assert adapters.lane_suffix() == "r"
+    assert (await server.job_status(job_id=job)).get("job", {}).get("state") == jobs.LOST
+    read = await server.inbox(agent="codex")
+    assert not any(job in m.get("body", "") for m in read.get("messages", [])), read
 
 
 # ── order, and the request's thread ──────────────────────────────────────────

@@ -932,22 +932,30 @@ def _with_restored(
     return claims, restored
 
 
-def plan_restoration(labels: Iterable[str], order: list[tuple[str, int]]) -> tuple[str, ...]:
-    """``held_lanes()`` as ``adopt_restored(labels, order)`` would leave it."""
-    with _claim_lock:
-        claims, _ = _with_restored(_claimed_lanes, _restored, labels, order)
-    return _ordered(derived_lane_suffix(), claims)
+class Restoration(NamedTuple):
+    """The claim list a restoration will leave, prepared before its commit."""
+
+    held: tuple[str, ...]  # held_lanes() afterwards: the order the registry is written in
+    claims: list[str]
+    restored: set[str]
 
 
-def adopt_restored(labels: Iterable[str], order: list[tuple[str, int]]) -> None:
-    """Adopt restored claims in their durable place (``_with_restored``). No
-    capacity check: the restoring transaction spent the slots under the claim
-    mutex every explicit claim also holds."""
+def prepare_restoration(labels: Iterable[str], order: list[tuple[str, int]]) -> Restoration:
+    """What adopting restored ``labels`` will leave (``_with_restored``), without
+    changing anything. The caller holds the claim mutex every claim and release
+    also holds, so it is still true when ``publish_restoration`` applies it."""
     with _claim_lock:
         claims, restored = _with_restored(_claimed_lanes, _restored, labels, order)
-        _claimed_lanes[:] = claims
+    return Restoration(_ordered(derived_lane_suffix(), claims), claims, restored)
+
+
+def publish_restoration(prepared: Restoration) -> None:
+    """Apply a prepared restoration, list and origins in one step. No capacity
+    check: the restoring transaction spent the slots."""
+    with _claim_lock:
+        _claimed_lanes[:] = prepared.claims
         _restored.clear()
-        _restored.update(restored)
+        _restored.update(prepared.restored)
 
 
 def qualify(agent: str, labels: Iterable[str]) -> tuple[str, ...]:

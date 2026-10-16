@@ -45,7 +45,7 @@ def _resolve_db(db_path: Optional[Path]) -> Path:
 # Bumped when a table is added or a column's meaning changes. Recorded in
 # `meta` so a running server can report what store it is talking to rather
 # than leaving "is this the new schema?" to be inferred from behaviour.
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9  # 9: thread_names
 
 # Facts a serving process records about its own channel pushes; readers derive
 # the delivery state (see ``delivery``). Also created by ``delivery`` on use: a

@@ -1273,11 +1273,15 @@ def _request_thread(ctx: "Context | None") -> str | None:
     """The top-level Codex thread the current request came from, if any."""
     try:
         meta = ctx.request_context.meta if ctx is not None else None
-    except Exception:  # noqa: BLE001 - outside a request, or no metadata
+    except Exception:  # noqa: BLE001 - outside a request: no metadata
         return None
     if meta is None:
         return None
-    return codex_queue.thread_of(meta.model_dump(by_alias=True))
+    try:
+        return codex_queue.thread_of(meta.model_dump(by_alias=True))
+    except Exception as exc:  # noqa: BLE001 - unattributed, and said why
+        channel._log(f"request metadata unreadable: {type(exc).__name__}: {exc}")
+        return None
 
 
 def _binding_for(thread: str | None, agent: str) -> tuple:
@@ -1307,9 +1311,10 @@ def _label_order(order) -> list[tuple[str, int]]:
     return [(lane.split(":", 1)[1], seq) for lane, seq in order]
 
 
-def _why(lane: str) -> str:
-    """What the last sweep found for ``lane``, as text."""
-    outcome = _restoration["outcomes"].get(lane)
+def _why(lane: str, outcomes: dict | None = None) -> str:
+    """What the last sweep found for ``lane``, as text, from ``outcomes`` (a
+    copy taken under the lock) or the live record."""
+    outcome = (_restoration["outcomes"] if outcomes is None else outcomes).get(lane)
     if outcome is None:
         return "not yet examined"
     return f"{outcome[0]}: {outcome[1]}" if outcome[1] else outcome[0]
@@ -1359,7 +1364,8 @@ def _restore_attempt() -> None:
     policy = _restore_policy(thread)
     if policy:
         with _identity_lock:
-            _restoration["policy"] = policy
+            # The latest attempt's word: a policy replaces an older failure.
+            _restoration["policy"], _restoration["failure"] = policy, None
         return
     agent = "codex"
     with _identity_lock:
@@ -1373,28 +1379,39 @@ def _restore_attempt() -> None:
         held=adapters.owned_recipients(agent),
         pending=adapters.qualify(agent, adapters.pending_claims()),
     )
+    if rows is None:
+        with _identity_lock:
+            _restoration["policy"], _restoration["failure"] = "no binding table", None
+        return
     outcomes = {r["lane"]: (r["outcome"], r["reason"]) for r in rows if r["outcome"] != "candidate"}
     candidates = [r for r in rows if r["outcome"] == "candidate"]
     with _identity_lock:
         if candidates:
+            prepared: list[adapters.Restoration] = []
+
+            def plan(new, order):
+                # Prepared before the commit, applied whole after it.
+                prepared[:] = [adapters.prepare_restoration(_labels(new), _label_order(order))]
+                return adapters.qualify(agent, prepared[0].held)
+
             result = sessions.restore(
                 thread,
                 candidates,
                 agent=agent,
                 free=adapters.free_slots(),
-                plan=lambda new, order: adapters.qualify(
-                    agent, adapters.plan_restoration(_labels(new), _label_order(order))
-                ),
+                plan=plan,
                 attribution=_attribution,
                 **adapters.host_identity(),
             )
             if result["stopped"]:
                 _restoration["policy"] = "stopped: a second top-level thread called this connection"
+                _restoration["failure"] = None
                 return
-            # Committed: memory follows, and nothing here can fail short of a
-            # bug - which the next attempt repairs (``sessions.survey``).
+            # Committed: the prepared list and the declaration follow in one
+            # step each, and a failure here is repaired by the next attempt,
+            # which finds this process's rows unheld (``sessions.survey``).
             if result["new"]:
-                adapters.adopt_restored(_labels(result["new"]), _label_order(result["order"]))
+                adapters.publish_restoration(prepared[0])
             outcomes.update(result["outcomes"])
         if adapters.self_agent() is None and any(o in {"held", "restored"} for o, _ in outcomes.values()):
             adapters.declare_agent(agent)  # names under codex: are held here
@@ -1429,7 +1446,7 @@ def _restoration_report() -> dict | None:
         "swept_at": record["swept_at"],
         "restored": sorted(lane for lane, (o, _) in found.items() if o == "restored"),
         "restoring": [
-            {"lane": lane, "why": _why(lane)}
+            {"lane": lane, "why": _why(lane, found)}
             for lane, (o, _) in sorted(found.items())
             if o in {"awaiting", "blocked", "changed", "cap"}
         ],
@@ -1443,8 +1460,9 @@ def _continuity_refusal(from_agent: str, recipient: str) -> tuple[dict | None, s
     Caller holds ``_identity_lock`` from recipient selection to ``jobs.create``.
 
     Refused, retryably, when the result would go to the parent-derived lane
-    while this thread has names this server does not hold yet: a result there
-    is not found again after a restart. Decided from the table as read now, not
+    while this thread has names this server does not hold yet: a later server
+    of this thread is not guaranteed to hold that lane, so it may never read
+    the result. Decided from the table as read now, not
     from the last sweep; another process binding after the read is accepted as
     the boundary."""
     thread = _pinned_thread()

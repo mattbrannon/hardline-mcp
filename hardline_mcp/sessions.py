@@ -314,9 +314,10 @@ def survey(
     held: Iterable[str],
     pending: Iterable[str],
     db_path: Optional[Path] = None,
-) -> list[dict]:
+) -> Optional[list[dict]]:
     """The read phase of a restoration: one page of ``thread``'s bindings, each
-    with an ``outcome``. Takes no writer.
+    with an ``outcome``, or None when the store has no binding table. Takes no
+    writer: every acceptance is validated again in ``restore``.
 
     ``listed`` are the recipients of this process's claims, ``held`` everything
     it holds (its derived lane too), ``pending`` the claims it awaits.
@@ -334,7 +335,7 @@ def survey(
 
     with closing(_connect(_resolve_db(db_path))) as conn:
         rows = bindings.page(conn, thread=thread, prefix=prefix, before=before, limit=limit)
-        for row in rows:
+        for row in rows or ():
             lane, mine = row["lane"], (row["pid"], row["process_key"]) == (pid, key)
             if lane in pending:
                 row.update(outcome="awaiting", reason="a claim of it is waiting here")
@@ -342,7 +343,10 @@ def survey(
                 row.update(outcome="held", reason=None)
             elif not mine and (state := probe(row["pid"], row["process_key"])) != DEAD:
                 row.update(outcome="blocked", reason=f"writer {state} (pid {row['pid']})")
-            elif lane not in held and (refusal := _refusal(conn, lane, pid, probe)):
+            elif refusal := _refusal(conn, lane, pid, probe):
+                # Held here is memory, not a grant: a held lane can be
+                # contested in the registry, and adopting it would exempt
+                # this server's dispatches from the continuity check.
                 row.update(outcome="blocked", reason=refusal["error"])
             else:
                 kind = "adopt" if lane in held else "acquire"
@@ -405,7 +409,9 @@ def restore(
                     continue
                 conn.execute("SAVEPOINT candidate")
                 reason = _restore_one(conn, c, thread, pid, key, probe)
-                if reason is None and c["kind"] == "acquire":
+                # The registry grant for adopt too: held here is memory, and a
+                # name restored without its row is one the wake never announces.
+                if reason is None:
                     if not accepted and key is not None:
                         conn.execute(
                             "DELETE FROM agent_sessions WHERE pid = ? AND process_key IS NOT ?",
@@ -465,10 +471,9 @@ def _restore_one(conn, c: dict, thread: str, pid: int, key, probe) -> Optional[t
         state = probe(c["pid"], c["process_key"])
         if state != DEAD:
             return ("blocked", f"writer {state} (pid {c['pid']})")
-    if c["kind"] == "acquire":
-        refusal = _refusal(conn, c["lane"], pid, probe)
-        if refusal:
-            return ("blocked", refusal["error"])
+    refusal = _refusal(conn, c["lane"], pid, probe)  # adopt too: held is not granted
+    if refusal:
+        return ("blocked", refusal["error"])
     return None
 
 

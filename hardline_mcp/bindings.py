@@ -95,9 +95,12 @@ def own_order(conn, *, thread: str, pid: int, key: Optional[str]) -> list[tuple[
     ]
 
 
-def page(conn, *, thread: str, prefix: str, before: Optional[int], limit: int) -> list[dict]:
+def page(
+    conn, *, thread: str, prefix: str, before: Optional[int], limit: int
+) -> Optional[list[dict]]:
     """One page of ``thread``'s bindings under ``prefix`` (``codex:``), newest
-    seq first, below ``before``; empty when the table does not exist."""
+    seq first, below ``before``; None when the table does not exist (a store
+    an older revision built), which is not the same as no bindings."""
     try:
         rows = conn.execute(
             "SELECT lane, thread, seq, pid, process_key FROM thread_names"
@@ -108,7 +111,7 @@ def page(conn, *, thread: str, prefix: str, before: Optional[int], limit: int) -
     except sqlite3.OperationalError as exc:
         if not _absent(exc):
             raise
-        return []
+        return None
     keys = ("lane", "thread", "seq", "pid", "process_key")
     return [dict(zip(keys, r)) for r in rows]
 

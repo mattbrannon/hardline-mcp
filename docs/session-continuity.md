@@ -123,13 +123,13 @@ A Codex session's names come back by themselves. Claude conversations still get 
 - a release or a dismissal (`release_session` of a name not held) withdraws it, whoever wrote it for this thread;
 - a restoration transfers it to the restoring server.
 
-Automatic grants (startup, heartbeat, repair) never touch it, so a name another process merely re-acquired keeps its thread's claim; after that process exits, the thread's next server gets it back with its backlog, as a claim would.
+Automatic grants (startup, heartbeat, repair) never touch it, so a name another process merely re-acquired keeps its thread's claim; after that process exits, the thread's next server gets it back with its backlog, as a claim would. An explicit claim that cannot be attributed, including a repeated `register_session` from a subagent or after the wake stopped, does remove the binding: claim from the top-level thread to keep it.
 
 **Restoration.** The wake's poll runs it, through `_regain_lanes`, never a tool. The first poll after the session's first hardline call surveys up to eight of the thread's bindings without the writer. A binding is restorable when its writer is verifiably DEAD, nothing else holds the name or owes work to it, and this server has room. Restorable bindings are then claimed in one transaction under `_identity_lock`. Attribution is checked once before any write, and each candidate is validated again inside its own savepoint before anything is written for it. A refused candidate costs nothing. Capacity is spent only on names that add a list entry. Then every row is reranked and the bindings renumbered to this server's order. The local claim list is adopted after the commit.
 
 Restored names form a run below the explicit claims, in durable order. The address is the last held lane, so a restart answers to the same name. More than eight names take one further fulfil per eight. `list_agents().you.restoration` reports what the last sweep found.
 
-**Async admission.** A dispatch whose result would go to the parent-derived lane is refused, retryably, while this thread has bindings this server does not hold. Such a result would not be found again after a restart. The refusal names the lanes and two ways out: claim a name, or dismiss one with `release_session`. A server with a claimed name or a reproducible lane dispatches as before. The rule reads the table at that moment, under the same lock as recipient selection and `jobs.create`; another process binding after the read is accepted as the boundary.
+**Async admission.** A dispatch whose result would go to the parent-derived lane is refused, retryably, while this thread has bindings this server does not hold. A later server of the thread is not guaranteed to hold that lane, so it might never read the result. The refusal names the lanes and two ways out: claim a name, or dismiss one with `release_session`. A server with a claimed name or a reproducible lane dispatches as before. The rule reads the table at that moment, under the same lock as recipient selection and `jobs.create`; another process binding after the read is accepted as the boundary.
 
 **What it does not do.** Nothing happens before the session's first hardline call, so an idle resumed thread is not woken. Restored names reach `inbox` after the next eligible poll, not in the pinning call. Two live servers on one thread (a TUI and the desktop app) share the list, and the first eligible one wins a name. A grant by an older revision is invisible to the table. Existing names have no binding until they are claimed once on this revision. Consumption stays process-wide.
 
@@ -140,7 +140,7 @@ Restored names form a run below the explicit claims, in durable order. The addre
 - restoration only on the poll thread, which deleted every time-budget rule;
 - admission reading one fact from the table instead of a restoration state machine.
 
-Astra approved round 7 with seven must-fix changes, all applied:
+Astra approved round 7 with seven must-fix changes, applied in the build:
 - claim publication under `_identity_lock`;
 - one identity for admission and dismissal;
 - a release withdraws the pinned thread's binding;
@@ -148,6 +148,13 @@ Astra approved round 7 with seven must-fix changes, all applied:
 - repair after a partial publication;
 - honest scheduling and contention wording;
 - regressions for each.
+
+The implementation was then reviewed by both. Each review caught the same defect: adopting a name already held here skipped the ownership rule and its registry grant, though held here is memory, not a grant. Each also named the mutations its tests let survive. Now fixed:
+- every candidate is checked against the ownership rule and given its registry grant;
+- the restoration's claim list is prepared before the commit and applied whole after it;
+- a store with no binding table reports `no binding table`.
+
+Regressions now cover each counterexample, including a real claim-and-dispatch interleaving and both two-restart variants. Each has a `names-*` mutation case.
 
 ## Operator note
 
