@@ -151,7 +151,7 @@ Astra approved round 7 with seven must-fix changes, applied in the build:
 
 The implementation was then reviewed by both, and Astra reviewed the fixes once more. What the reviews found, and where it stands:
 - **Adoption without the ownership rule, fixed.** A name already held here skipped the rule and its registry grant, though held here is memory, not a grant. Every candidate is now checked and granted.
-- **Publication, fixed.** It is prepared before the commit and published origins first, each origins set rebound whole, so a fault part way leaves names unlisted rather than listed without their origin. The next attempt then adopts them again.
+- **Publication, fixed.** It is prepared before the commit and published origins first, each origins set rebound whole, so a fault part way leaves names unlisted rather than listed without their origin. The next attempt then adopts them again. An explicit claim of such a name before the repair clears its leftover origin, so it stays explicit.
 - **Missing table, fixed.** A store with no binding table reports `no binding table`.
 
 Regressions, each with a `names-*` mutation case, cover:

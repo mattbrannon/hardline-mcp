@@ -837,6 +837,7 @@ def claim_lane(label: str) -> Optional[str]:
     The previous lane is NOT surrendered - see ``held_lanes``. A pending claim
     for the same name is settled by this adoption.
     """
+    global _restored
     label = label.strip()
     with _claim_lock:
         if label in _claimed_lanes:
@@ -846,6 +847,9 @@ def claim_lane(label: str) -> Optional[str]:
         if refused:
             return refused
         _claimed_lanes.append(label)
+        # A new entry is an explicit claim, whatever origin a restoration that
+        # failed part way left recorded for the name (``publish_restoration``).
+        _restored = _restored - {label}
         _pending_claims.pop(label, None)
     return None
 
@@ -956,7 +960,8 @@ def publish_restoration(prepared: Restoration) -> None:
     transaction spent the slots.
 
     Origins first, each a whole rebinding: an origin for a name not yet listed
-    is inert, so a failure before the list is replaced leaves the new names
+    is inert - ``claim_lane`` clears it if the name is claimed explicitly
+    first - so a failure before the list is replaced leaves the new names
     simply unlisted, which the next attempt finds unheld and adopts again
     (``sessions.survey``). The reverse order could leave them listed without
     their origin - read as explicit claims, and never repaired."""

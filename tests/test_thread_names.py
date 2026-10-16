@@ -8,6 +8,7 @@ successor. A live foreign process is a real child.
 import sqlite3
 import subprocess
 import sys
+import threading
 from contextlib import closing
 from types import SimpleNamespace
 
@@ -469,6 +470,17 @@ def test_a_publication_that_fails_part_way_is_repaired_in_order(wake, store, mon
     assert adapters.claimed_lanes() == ("a", "b"), "a was read as an explicit claim"
 
 
+def test_an_explicit_claim_clears_an_origin_a_failed_publication_left(wake, store):
+    """Origins published, then the list replacement failed: the name is then
+    claimed explicitly before any repair. It is explicit, so a newer restored
+    name lands below it."""
+    adapters._restored = frozenset({"a"})  # the state such a fault leaves
+    assert adapters.claim_lane("a") is None
+    bind(store, "codex:b", 5)
+    server._restore_pending()
+    assert adapters.claimed_lanes() == ("b", "a")
+
+
 def test_a_dead_launching_host_restores_nothing(wake, store, monkeypatch):
     bind(store, "codex:a", 1)
     monkeypatch.setattr(adapters, "host_identity", lambda: {"host_pid": GONE, "host_key": "gone"})
@@ -484,55 +496,76 @@ def test_a_store_without_the_table_says_so(wake, store):
     assert server._restoration["policy"] == "no binding table"
 
 
+class _WatchedLock:
+    """``server._identity_lock``, telling the test when the claimer asks for it."""
+
+    def __init__(self, inner, asked):
+        self.inner, self.asked = inner, asked
+
+    def acquire(self, *a, **k):
+        if threading.current_thread().name == "claimer":
+            self.asked.set()
+        return self.inner.acquire(*a, **k)
+
+    def release(self):
+        self.inner.release()
+
+    def locked(self):
+        return self.inner.locked()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
+
+
 @pytest.mark.parametrize("path", ["explicit", "fulfilled"])
 def test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job(
     wake, store, monkeypatch, path
 ):
-    """The dispatch holds the identity lock from choosing its recipient to
-    creating its job; a claim made durable meanwhile publishes only after."""
-    import threading
-    import time
+    """The dispatch holds the identity lock from its recipient to its job. A
+    claim reaching publication meanwhile asks for the lock and waits for it:
+    the job is created, at the recipient chosen, before the claim publishes."""
+    asked, in_job, published = (threading.Event() for _ in range(3))
+    events = []
+    monkeypatch.setattr(server, "_identity_lock", _WatchedLock(server._identity_lock, asked))
+    create, claim_lane = jobs.create, adapters.claim_lane
 
-    chosen, durable, events = threading.Event(), threading.Event(), []
-    result_lane, claim, claim_lane = server._result_lane, sessions.claim, adapters.claim_lane
+    def creating(**kw):
+        in_job.set()
+        asked.wait(10)  # the claimer has asked for the lock (or never will)
+        # Held, it cannot publish; not held, it does so at once: give it the chance.
+        published.wait(1.0)
+        events.append(("job", kw["requester"]))
+        return create(**kw)
 
-    def choosing(agent):
-        lane = result_lane(agent)
-        chosen.set()
-        assert durable.wait(30)  # the claim is durable and now wants the lock
-        time.sleep(0.3)
-        events.append("dispatch decided")
-        return lane
+    def claiming(label):
+        events.append(("claim", label))
+        published.set()
+        return claim_lane(label)
 
-    def claiming(**kw):
-        got = claim(**kw)
-        durable.set()
-        return got
-
-    monkeypatch.setattr(server, "_result_lane", choosing)
-    monkeypatch.setattr(sessions, "claim", claiming)
-    monkeypatch.setattr(
-        adapters, "claim_lane", lambda label: events.append("claim published") or claim_lane(label)
-    )
+    monkeypatch.setattr(jobs, "create", creating)
+    monkeypatch.setattr(adapters, "claim_lane", claiming)
     dispatched = {}
     dispatcher = threading.Thread(target=lambda: dispatched.update(_admit()))
     dispatcher.start()
-    assert chosen.wait(30)
+    assert in_job.wait(30)
+    # Unattributed, so no binding: the dispatch is accepted and reaches its job.
     if path == "explicit":
         claimer = threading.Thread(
-            target=server._register_session_impl, args=("r", None, False, THREAD)
+            target=server._register_session_impl, args=("r", None, False, None), name="claimer"
         )
     else:
-        assert adapters.await_lane("r", "codex", THREAD) is None
-        claimer = threading.Thread(target=server._fulfil_pending)
+        assert adapters.await_lane("r", "codex", None) is None
+        claimer = threading.Thread(target=server._fulfil_pending, name="claimer")
     claimer.start()
     dispatcher.join(30)
     claimer.join(30)
-    assert events == ["dispatch decided", "claim published"], events
-    # Decided before the claim published, on a consistent snapshot: R was
-    # durable but not yet held here, so the dispatch was refused, not sent to
-    # the lane the claim was replacing.
-    assert dispatched.get("accepted") is False and dispatched.get("retryable") is True, dispatched
+    assert dispatched.get("accepted") is True, dispatched
+    assert events == [("job", dispatched["lane"]), ("claim", "r")], events
+    assert dispatched["lane"] != "codex:r"
 
 
 def test_a_restoration_whose_local_half_was_lost_is_repaired(wake, store):
