@@ -188,6 +188,34 @@ async def test_a_resend_that_reached_nothing_leaves_the_notice_unsettled(store, 
         _, third = await posts.wait(3, timeout=10.0)
         assert inbox_nonce(third) == inbox_nonce(first)
         assert wake.facts["oldest_unreceipted_at"] == owed, "the push is still owed since the first"
+        assert delivery.derive(wake.facts, owed + delivery.GRACE) == "unreceipted"
+        tg.cancel_scope.cancel()
+
+
+@pytest.mark.anyio
+async def test_a_resend_chosen_before_its_receipt_goes_out_and_settles_nothing(store, monkeypatch):  # noqa: F811
+    """poll picks the resend, the receipt lands, then the copy goes and fails:
+    the one copy past settlement is allowed, and its failure revives nothing."""
+    monkeypatch.setattr(announce, "RETRY_S", 0.05)
+    sends = []
+
+    def post(inbox, text):
+        sends.append(text)
+        if len(sends) == 2:  # the resend, already chosen: its receipt arrives first
+            (wake,) = [w for w in announce._installed if isinstance(w, claude_inbox.ClaudeInboxWake)]
+            assert wake.accept_receipt(inbox_nonce(text))
+        raise OSError("broken pipe")
+
+    async with anyio.create_task_group() as tg:
+        await claude(tg, monkeypatch, post)
+        mailbox.send("codex", LANE, "one")
+        with anyio.fail_after(10):
+            while len(sends) < 2:
+                await anyio.sleep(0.01)
+        await anyio.sleep(0.3)  # many polls, past any RETRY_S
+        (wake,) = [w for w in announce._installed if isinstance(w, claude_inbox.ClaudeInboxWake)]
+        assert len(sends) == 2, "the settled notice was sent again"
+        assert wake.outstanding is None and wake._retry_at is None
         tg.cancel_scope.cancel()
 
 

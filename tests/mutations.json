@@ -4635,7 +4635,8 @@
     "before": "            if self.outstanding is None or self.outstanding[0] != nonce:\n                return\n            self._failures += 1\n",
     "after": "            self._failures += 1\n",
     "tests": [
-      "tests/test_unsettled_notices.py::test_a_receipt_settles_it_even_when_it_lands_before_the_failure"
+      "tests/test_unsettled_notices.py::test_a_receipt_settles_it_even_when_it_lands_before_the_failure",
+      "tests/test_unsettled_notices.py::test_a_resend_chosen_before_its_receipt_goes_out_and_settles_nothing"
     ]
   },
   "a-stopped-wake-is-not-resent": {
@@ -4756,6 +4757,14 @@
     "after": "            self._failures = 0\n",
     "tests": [
       "tests/test_unsettled_notices.py::test_a_receipt_clears_a_pending_resend"
+    ]
+  },
+  "a-notsent-resend-keeps-the-owed-push": {
+    "file": "hardline_mcp/announce.py",
+    "before": "                            self.unsettled(nonce, f\"not sent: {exc}\")\n",
+    "after": "                            self.facts[\"oldest_unreceipted_at\"] = None\n                            self.unsettled(nonce, f\"not sent: {exc}\")\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_resend_that_reached_nothing_leaves_the_notice_unsettled"
     ]
   }
 }
