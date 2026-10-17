@@ -99,11 +99,27 @@ def test_a_wake_never_pinned_writes_no_row():
     assert facts() == {}
 
 
-def test_a_failed_queue_records_no_route():
+def test_a_failed_queue_records_why_and_counts_nothing():
+    """Seen 2026-10-16: the one failure that mattered left no reason anywhere -
+    the route was never written, and Codex's log cap had dropped its line."""
     wake = armed(Steer(REFUSED), Queue(ok=False))
     with pytest.raises(RuntimeError):
         wake.send(THREAD, "notice")
-    assert facts().get("last_route") is None
+    row = facts()
+    assert row.get("last_route") == "failed"
+    reason = row.get("last_route_reason") or ""
+    assert "boom" in reason and "no active turn to steer" in reason, reason
+    assert (row.get("steered"), row.get("queued"), row.get("ambiguous")) == (None, None, None)
+
+
+def test_a_queue_that_raises_is_recorded_as_failed():
+    def broken(thread, text):
+        raise OSError("spawn failed")
+
+    wake = armed(Steer(REFUSED), broken)
+    with pytest.raises(Exception):  # noqa: B017 - which one is not the point; the record is
+        wake.send(THREAD, "notice")
+    assert "spawn failed" in (facts().get("last_route_reason") or "")
 
 
 def test_a_store_initialised_here_still_takes_an_older_revisions_positional_write(tmp_path):

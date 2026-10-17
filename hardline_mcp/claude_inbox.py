@@ -123,7 +123,8 @@ def post(inbox: Inbox, text: str) -> None:
     was delivered. Anything else (a failed or timed-out write) may have
     delivered it. Bounded: a write the host never drains is left to a daemon
     thread, which holds the connection until the host reads or this process
-    exits - at most one, since the notice it carried stays outstanding.
+    exits; the ``TimeoutError`` carries it as ``writer``, so the wake starts no
+    second one while it lives.
     """
     lines = (
         {"type": "auth", "token": inbox.token},
@@ -135,7 +136,9 @@ def post(inbox: Inbox, text: str) -> None:
     writer.start()
     writer.join(SEND_TIMEOUT_S)
     if not outcome:
-        raise TimeoutError(f"inbox write took longer than {SEND_TIMEOUT_S:.0f} s")
+        exc = TimeoutError(f"inbox write took longer than {SEND_TIMEOUT_S:.0f} s")
+        exc.writer, exc.outcome = writer, outcome  # the outcome lands there, late
+        raise exc
     if outcome[0] is not None:
         raise outcome[0]
 
@@ -149,8 +152,31 @@ class ClaudeInboxWake(announce.Announcer):
     def notice(self, nonce: str) -> str:
         return notice(nonce)
 
+    # A timed-out write: (its text, its thread, the list its outcome lands in).
+    _late: Optional[tuple[str, threading.Thread, list]] = None
+
     def send(self, inbox: Inbox, text: str) -> None:
-        post(inbox, text)
+        """Post, unless a timed-out write of this same notice has an answer.
+
+        While that write still holds its connection it may yet deliver, and a
+        second beside it is a leak, not a retry: the notice stays unsettled.
+        Once it has finished, its outcome is this send's: a late success is
+        delivered, never written again, and a late failure is written again. A
+        late write of another notice - one since settled - decides nothing."""
+        late, self._late = self._late, None
+        if late is not None:
+            late_text, writer, outcome = late
+            if writer.is_alive():
+                self._late = late
+                raise TimeoutError("the previous notice's write is still blocked; not written again")
+            if late_text == text and outcome and outcome[0] is None:
+                return
+        try:
+            post(inbox, text)
+        except TimeoutError as exc:
+            if getattr(exc, "writer", None) is not None:
+                self._late = (text, exc.writer, exc.outcome)
+            raise
 
     def arm(self, client: dict) -> None:
         self.declare()  # the address was known from the start
