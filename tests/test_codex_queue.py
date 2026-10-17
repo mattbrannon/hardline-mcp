@@ -360,7 +360,8 @@ async def test_reading_the_mail_is_not_evidence_the_notice_ran(lane):
 
 @pytest.mark.anyio
 async def test_a_failed_attempt_stays_outstanding(lane):
-    """A timeout may still have enqueued it; a retry would queue it twice."""
+    """A timeout may still have enqueued it: it is queued again only after
+    RETRY_S (test_unsettled_notices), never at once, and never a second notice."""
     queue = Queue(ok=False)
     async with anyio.create_task_group() as tg:
         wire, _ = await codex(tg, queue)

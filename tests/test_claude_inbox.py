@@ -130,7 +130,8 @@ async def test_an_inbox_that_cannot_be_reached_is_tried_again(store, monkeypatch
 @pytest.mark.anyio
 async def test_a_write_that_may_have_landed_stays_outstanding(store, monkeypatch):
     """The host answers a delivered message with nothing, so a failed write
-    may have delivered it; a retry could post it twice."""
+    may have delivered it: posted again only after RETRY_S
+    (test_unsettled_notices), never at once, and never a second notice."""
     posts = Posts(fail=OSError("broken pipe"))
     async with anyio.create_task_group() as tg:
         await claude(tg, monkeypatch, posts)

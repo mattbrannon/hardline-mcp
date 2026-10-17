@@ -152,19 +152,29 @@ class CodexWake(announce.Announcer):
             why = f"steer refused: {outcome.detail}"
             tried = turn
         # A failure may still have enqueued (the commit can land before the
-        # response is lost): it stays outstanding, never NotSent.
-        result = self.queue(thread, text)
+        # response is lost): never NotSent, so it is sent again later. Its
+        # reason is recorded: Codex's own log keeps it only until the log cap.
+        try:
+            result = self.queue(thread, text)
+        except Exception as exc:  # noqa: BLE001 - recorded, then raised as before
+            result = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         if not result.get("ok"):
+            self._route("failed", f"{why}; codex queue failed: {result.get('error')}")
             raise RuntimeError(f"codex queue failed: {result.get('error')}")
         self._route("queue", why)
 
     def _route(self, route: str, reason: Optional[str] = None) -> None:
         """Record which way a notice went, for ``report``. ``ambiguous`` is a
-        steer that may or may not have landed: counted apart, never as steered."""
-        counter = {"steer": "steered", "queue": "queued", "ambiguous": "ambiguous"}[route]
+        steer that may or may not have landed: counted apart, never as steered.
+        ``failed`` is a queue that reported failure: the last route, uncounted
+        (no column holds a count, and older revisions write this table)."""
+        counter = {
+            "steer": "steered", "queue": "queued", "ambiguous": "ambiguous", "failed": None
+        }[route]
         with self._lock:
             self.routes["last_route"], self.routes["last_route_reason"] = route, reason
-            self.routes[counter] = self.routes.get(counter, 0) + 1
+            if counter:
+                self.routes[counter] = self.routes.get(counter, 0) + 1
             self._routes_dirty = True
         self._flush()
 

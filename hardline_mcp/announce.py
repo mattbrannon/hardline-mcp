@@ -11,18 +11,29 @@ read its hardline inbox, with a receipt nonce as its only variable. A stale or
 duplicated notice only points at an inbox, so the transport never has to be
 tracked exactly: one notice is outstanding at a time, released only by its own
 receipt. New mail is announced once; deferred mail is not re-announced.
+
+A send that may or may not have delivered is sent again, the same notice with
+the same receipt, after a growing wait (``RETRY_S`` doubling to
+``MAX_RETRY_S``), until a receipt settles it. Seen 2026-10-16: one failed
+``codex queue`` held a session's notice outstanding with nothing delivered, and
+its thread was never woken again. A send that succeeded is not sent again: it
+is somewhere the session will see it, and a Codex queue never deduplicates.
 """
 
 from __future__ import annotations
 
 import secrets
 import threading
+import time
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
 import anyio
 
 from . import adapters, channel, delivery, procid, sessions
+
+RETRY_S = 300.0  # the first wait before an unsettled notice is sent again
+MAX_RETRY_S = 3600.0  # where the doubling stops
 
 
 class NotSent(Exception):
@@ -45,13 +56,17 @@ class Announcer:
         fulfil: Optional[Callable[[], list[str]]] = None,
         clock: Callable[[], datetime] = channel._now,
         poll_s: float = channel.POLL_S,
+        monotonic: Callable[[], float] = time.monotonic,
     ):
         self.address = address  # given at startup, or pinned by a subclass
         self.fulfil = fulfil
         self.clock = clock
         self.poll_s = poll_s
+        self.monotonic = monotonic  # retry deadlines; the clock is for recorded facts
         self.stopped = False  # set once, never cleared: no further notices
         self.outstanding: Optional[tuple[str, datetime]] = None  # (nonce, sent at)
+        self._retry_at: Optional[float] = None  # when the outstanding notice is sent again
+        self._failures = 0  # unsettled sends of the outstanding notice
         self.announced: set[int] = set()
         self.pointed: dict[str, int] = {}  # name held before -> newest id told
         self._previous_pointed: dict[str, int] = {}  # restored by take_back
@@ -101,8 +116,22 @@ class Announcer:
             self.facts["last_receipted_push_at"] = self.outstanding[1]
             self.facts["oldest_unreceipted_at"] = None
             self.outstanding = None
+            self._retry_at, self._failures = None, 0  # settled, by any copy that landed
             self._dirty = True
             return True
+
+    def unsettled(self, nonce: str, why: str) -> None:
+        """A send of ``nonce`` may not have delivered: send it again later,
+        unless a receipt settled it meanwhile. Memory only."""
+        with self._lock:
+            if self.outstanding is None or self.outstanding[0] != nonce:
+                return
+            self._failures += 1
+            wait = min(RETRY_S * 2 ** min(self._failures - 1, 16), MAX_RETRY_S)
+            self._retry_at = self.monotonic() + wait
+            self._notes.append(
+                f"{self.transport} notice unsettled ({why}); sent again in {wait:.0f} s"
+            )
 
     def state(self) -> Optional[str]:
         with self._lock:
@@ -150,13 +179,13 @@ class Announcer:
                     setattr(self, flag, True)  # retried on the next poll
                 channel._log(f"{self.transport} {what} not recorded: {type(exc).__name__}: {exc}")
 
-    def poll(self) -> Optional[tuple[object, str, set[int]]]:
+    def poll(self) -> Optional[tuple[object, str, Optional[set[int]]]]:
         """``(address, nonce, ids)`` to send now, if anything. Blocking; off the loop.
 
         Recorded as outstanding, and its mail as announced, BEFORE it is sent:
-        an attempt counts whatever its outcome - a timeout may still have
-        delivered it, and a retry would then send it twice - unless the
-        transport says it delivered nothing (``take_back``).
+        an attempt counts whatever its outcome, unless the transport says it
+        delivered nothing (``take_back``). An unsettled one is due again, the
+        same notice, with ``ids`` None: its mail was announced by the first.
         """
         now = self.clock()
         if self.fulfil and (
@@ -168,6 +197,17 @@ class Announcer:
         address = self.address
         if address is None:
             return None  # no address yet; set once, never unset
+        with self._lock:
+            # Before the scan: an outstanding notice's own mail is announced,
+            # so the scan finds nothing new and would return before this.
+            if (
+                not self.stopped
+                and self.outstanding is not None
+                and self._retry_at is not None
+                and self.monotonic() >= self._retry_at
+            ):
+                self._retry_at = None  # one attempt at a time; its outcome reschedules
+                return address, self.outstanding[0], None
         owned = adapters.owned_recipients()
         start = self._cursor
         rows, self._cursor = channel.unread(owned, after=start)
@@ -241,15 +281,14 @@ class Announcer:
                     address, nonce, ids = due
                     try:
                         await anyio.to_thread.run_sync(self.send, address, self.notice(nonce))
-                    except NotSent:
-                        await anyio.to_thread.run_sync(self.take_back, nonce, ids)
+                    except NotSent as exc:
+                        if ids is None:  # a resend: the first may still have landed
+                            self.unsettled(nonce, f"not sent: {exc}")
+                        else:
+                            await anyio.to_thread.run_sync(self.take_back, nonce, ids)
                         raise
                     except Exception as exc:  # noqa: BLE001 - may have delivered
-                        with self._lock:
-                            self._notes.append(
-                                f"{self.transport} notice failed; it stays outstanding: "
-                                f"{type(exc).__name__}: {exc}"
-                            )
+                        self.unsettled(nonce, f"{type(exc).__name__}: {exc}")
                 delay = self.poll_s
             except Exception as exc:  # noqa: BLE001 - isolation is the point
                 with self._lock:

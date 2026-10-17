@@ -27,7 +27,8 @@ read its hardline inbox. A stale or duplicated notice points at an inbox that
 holds nothing new, so it costs a turn and asks for nothing beyond reading the
 inbox. So the design does not need to track Codex's queue exactly. It only has to keep
 notices from piling up, and it does that with **one outstanding notice,
-released only by its own receipt**.
+released only by its own receipt**. A send that may have delivered is sent
+again, as the same notice, after a growing wait; a send that completed never is.
 
 ## Design
 
@@ -99,8 +100,9 @@ Every 2 s, `CodexWake` follows these steps:
    echoed its nonce). A queue-triggered call is not proof: one queued turn
    makes many calls, and one made after the next notice was queued would
    release that notice before it ever started. Until the receipt comes back,
-   nothing more is queued. There is no timeout: "possibly still queued" never
-   expires into permission to queue another.
+   no other notice is queued. Time never releases it: "possibly still queued"
+   does not expire into permission to queue a different notice. It only lets
+   the same one be sent again (step 4).
 3. **New mail?** That means unread mail on granted lanes whose id has not been
    announced. Announced ids are kept in memory and pruned to the unread set
    after each complete sweep. Mail that stays unread because the session
@@ -110,12 +112,24 @@ Every 2 s, `CodexWake` follows these steps:
 4. **Queue one notice.** It is recorded as outstanding, and its ids as
    announced, *before* `codex queue` runs. The attempt counts whatever the
    outcome:
-   - **Success** means "queued", never "delivered".
+   - **Success** means "queued", never "delivered". It is never sent again:
+     it sits in the queue, which never deduplicates, and the session will see
+     it when the thread next goes idle.
    - **A failure or timeout** may still have enqueued (the commit can land
-     before the response is lost). It stays outstanding rather than being
-     taken back and retried, so a lost response can never duplicate a notice.
-   - **A broken setup** therefore makes one attempt and goes quiet, and the
-     session's delivery state reads `unreceipted`.
+     before the response is lost). It is not taken back. It stays outstanding
+     and is sent again, the same notice with the same nonce, after `RETRY_S`
+     (300 s), the wait doubling per unsettled attempt up to `MAX_RETRY_S`
+     (1 h), until a receipt settles it. A receipt for any copy settles it.
+     Each failure that had in fact enqueued costs one extra turn that only
+     points at the inbox; the cap bounds their rate, not their number.
+   - **A broken setup** therefore keeps trying at the growing interval, and
+     the session's delivery state reads `unreceipted` meanwhile.
+   - **A stopped wake** (a second top-level thread) sends nothing again.
+
+   The case that motivated this (2026-10-16): a steer was refused, then
+   `codex queue` failed and inserted nothing. The notice stayed outstanding, so
+   the thread was never woken again and five messages went unannounced until
+   the server was replaced.
 
 ### Running `codex queue`
 
@@ -131,6 +145,11 @@ Every 2 s, `CodexWake` follows these steps:
   addressed in the wrong store. There, `codex queue` rejects the unknown thread
   UUID: the notice fails closed instead of misdelivering. Documented in
   configuration: set the same `CODEX_HOME` in hardline's MCP registration env.
+- **Probing by hand.** Codex 0.162.1 has no command to list or remove a queued
+  item (`codex queue` has no subcommands), and an item is removed only once
+  started. So a probe must target a thread that will next go idle and run it.
+  One queued at an unused thread stays in `~/.codex/queue_1.sqlite`; one from
+  2026-10-07 was still pending ten days later.
 
 ### Steering a busy turn (rev 3)
 
@@ -167,7 +186,8 @@ notice text. On each notice, `CodexWake.send`:
    back: a timeout, a closed pipe, or any other error code. `-32603` is
    returned when the submission itself fails, which can follow input that
    landed. It may be enqueued and nothing dedupes a retry, so the notice
-   stays outstanding, like a failed queue attempt.
+   stays outstanding and is sent again after the wait, like a failed queue
+   attempt (a receipt for either copy settles it).
 
 **What steering reaches.** A turn that has called hardline: the turn that
 dispatched an async job, typically, which is the case this exists for. A turn
@@ -179,7 +199,7 @@ active turn's id, but it is never parsed for one.
 is seen next turn, and a `UserPromptSubmit` hook can block it. An interrupt
 drops it, unlike a queued notice, which waits for the resume. So nothing about
 the gate changes: the notice is outstanding until its receipt, and an accepted
-steer is never retried. A dropped steer pauses waking until the next receipt,
+steer is never sent again. A dropped steer pauses waking until the next receipt,
 which the session's `delivery` shows as `awaiting_receipt`, then `unreceipted`.
 
 **Transport.** `codex_steer.steer(thread, turn, text)` starts
@@ -218,10 +238,12 @@ affected.
 
 **What it does not change:** the notice text, the gate, receipts and the
 delivery facts. Which route each notice took is logged, and also recorded in the
-`codex_routes` table, one row per process: `last_route` (`steer`, `queue` or
-`ambiguous`), `last_route_reason` (why it was queued, or what left a steer
-unconfirmed; empty when steered) and running counts `steered`, `queued` and
-`ambiguous`. A steer that may have landed is counted apart, never as steered.
+`codex_routes` table, one row per process: `last_route` (`steer`, `queue`, `ambiguous` or `failed`), `last_route_reason`
+(why it was queued, or what left a steer unconfirmed; empty when steered) and
+running counts `steered`, `queued` and `ambiguous`. A steer that may have
+landed is counted apart, never as steered. A `codex queue` that reports failure
+or raises is recorded as `failed`, with the steer fallback reason plus the
+queue error in `last_route_reason`, and is in no count.
 The facts live in their own table, written apart from `push_delivery`, because
 older revisions write `push_delivery` with positional values, which a column
 added there would break in every running server. Rows of dead processes are
@@ -232,8 +254,13 @@ with `codex_lane_servers_without_row`: registered processes not shown dead that
 hold a `codex:` lane and wrote no row (older code, a subagent's server that
 never pins, a failed write, or a client that is not Codex at all: a lane prefix
 is not a client identity). Their notices are in no total. A row's zeros mean no
-persisted route outcome, not no notice: a queue that failed, possibly after
-committing, records no route.
+counted route outcome, not no notice: a failed queue, possibly after
+committing, is recorded as `failed` but counted nowhere.
+
+`report` also has a `stalled_wakes` section: live servers whose wake has owed a
+receipt for at least the delivery grace (10 min) while their registered lanes
+hold unread mail, with `servers_with_facts` and `servers_without_facts`. It is
+evidence, not proof of a failed transport.
 
 ### Delivery state and receipts
 
@@ -262,10 +289,14 @@ sessions too.
 - **Hardline restart** (MCP reconnect): the in-memory outstanding notice is
   forgotten, so at most one extra notice per restart.
 - **Disconnect or session end:** no process, no waking. Liveness is derived.
-- **The receipt never arrives** (a notice ran but its turn never echoed the
-  nonce, or a failed attempt): waking stays paused, and delivery reads
-  `unreceipted`. The session still sees all mail at its next inbox call. This
-  is deliberately quiet rather than repeating.
+- **The receipt never arrives.** Waking stays paused and delivery reads
+  `unreceipted`; the session still sees all mail at its next inbox call.
+  - A failed or unconfirmed attempt is sent again, the same notice, at a
+    growing interval.
+  - A notice that was queued or steered and accepted, but whose turn never
+    echoed the nonce, is not sent again, and the wait for its receipt has no
+    end. A remaining limitation: a queue never deduplicates, so a resend
+    could duplicate it (#104).
 
 ### What does not change
 
@@ -290,7 +321,9 @@ sessions too.
     found mid-scan stops the reservation);
   - released only by its receipt, sent over the wire through the tap;
   - not released by queue-triggered calls, by time, or by the mail being read;
-  - a failed or timed-out attempt stays outstanding.
+  - a failed or timed-out attempt stays outstanding and is sent again, same
+    notice and nonce, after a doubling wait; a completed send never is;
+    `NotSent` on a resend keeps it unsettled; a stopped wake sends nothing.
 - **Isolation:** `observe()` writes nothing on the event loop; a failed fact
   write is retried.
 - **New mail only:**
@@ -364,6 +397,10 @@ sessions too.
 - **A failed fact write was never retried.** It is retried on the next poll.
 - **Overclaiming docs** (one outstanding notice "until evidence", "at most one
   short turn", "a 30 s bound") were corrected.
+- **A failed attempt held the gate forever.** The rev 2 rule that a failed or
+  timed-out attempt stays outstanding with no timeout left a thread unwoken for
+  good (2026-10-16, above). The same notice is now sent again after a growing
+  wait until a receipt settles it. A completed send is still never repeated.
 
 **Verification pass (gpt-6-astra), each with a test and a mutation case:**
 - **Deferred mail could hide new mail.** More than one batch of deferred mail

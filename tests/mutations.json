@@ -2096,8 +2096,8 @@
   },
   "notsent-is-taken-back": {
     "file": "hardline_mcp/announce.py",
-    "before": "                    except NotSent:\n                        await anyio.to_thread.run_sync(self.take_back, nonce, ids)\n",
-    "after": "                    except NotSent:\n",
+    "before": "                        else:\n                            await anyio.to_thread.run_sync(self.take_back, nonce, ids)\n",
+    "after": "                        else:\n                            pass\n",
     "tests": [
       "tests/test_claude_inbox.py::test_an_inbox_that_cannot_be_reached_is_tried_again"
     ]
@@ -4570,6 +4570,152 @@
     "after": "    if False:\n",
     "tests": [
       "tests/test_adapters.py::test_a_write_run_keeps_codex_git_check_and_says_why_it_refused"
+    ]
+  },
+  "unsettled-notice-is-sent-again": {
+    "file": "hardline_mcp/announce.py",
+    "before": "                        self.unsettled(nonce, f\"{type(exc).__name__}: {exc}\")\n",
+    "after": "                        pass\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_failed_codex_queue_is_queued_again_until_receipted",
+      "tests/test_unsettled_notices.py::test_a_claude_write_that_failed_is_posted_again"
+    ]
+  },
+  "unsettled-notice-keeps-its-receipt": {
+    "file": "hardline_mcp/announce.py",
+    "before": "                return address, self.outstanding[0], None\n",
+    "after": "                return address, secrets.token_hex(8), None\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_an_unsettled_notice_is_due_again_with_its_own_receipt",
+      "tests/test_unsettled_notices.py::test_a_failed_codex_queue_is_queued_again_until_receipted"
+    ]
+  },
+  "unsettled-notice-waits-before-a-resend": {
+    "file": "hardline_mcp/announce.py",
+    "before": "                and self.monotonic() >= self._retry_at\n",
+    "after": "                and True\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_an_unsettled_notice_is_due_again_with_its_own_receipt"
+    ]
+  },
+  "unsettled-notice-one-attempt-at-a-time": {
+    "file": "hardline_mcp/announce.py",
+    "before": "                self._retry_at = None  # one attempt at a time; its outcome reschedules\n",
+    "after": "                pass\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_an_unsettled_notice_is_due_again_with_its_own_receipt"
+    ]
+  },
+  "unsettled-wait-doubles": {
+    "file": "hardline_mcp/announce.py",
+    "before": "            wait = min(RETRY_S * 2 ** min(self._failures - 1, 16), MAX_RETRY_S)\n",
+    "after": "            wait = min(RETRY_S, MAX_RETRY_S)\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_the_wait_doubles_to_its_cap"
+    ]
+  },
+  "unsettled-wait-is-capped": {
+    "file": "hardline_mcp/announce.py",
+    "before": "            wait = min(RETRY_S * 2 ** min(self._failures - 1, 16), MAX_RETRY_S)\n",
+    "after": "            wait = RETRY_S * 2 ** min(self._failures - 1, 16)\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_the_wait_doubles_to_its_cap"
+    ]
+  },
+  "a-receipt-resets-the-unsettled-count": {
+    "file": "hardline_mcp/announce.py",
+    "before": "            self._retry_at, self._failures = None, 0  # settled, by any copy that landed\n",
+    "after": "            pass\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_receipt_after_a_resend_settles_it"
+    ]
+  },
+  "a-late-failure-after-a-receipt-is-ignored": {
+    "file": "hardline_mcp/announce.py",
+    "before": "            if self.outstanding is None or self.outstanding[0] != nonce:\n                return\n            self._failures += 1\n",
+    "after": "            self._failures += 1\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_receipt_settles_it_even_when_it_lands_before_the_failure"
+    ]
+  },
+  "a-stopped-wake-is-not-resent": {
+    "file": "hardline_mcp/announce.py",
+    "before": "                not self.stopped\n                and self.outstanding is not None\n",
+    "after": "                self.outstanding is not None\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_stopped_wake_sends_nothing_again"
+    ]
+  },
+  "a-resend-that-reached-nothing-is-not-taken-back": {
+    "file": "hardline_mcp/announce.py",
+    "before": "                        if ids is None:  # a resend: the first may still have landed\n",
+    "after": "                        if False:\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_resend_that_reached_nothing_leaves_the_notice_unsettled"
+    ]
+  },
+  "a-blocked-inbox-write-is-not-joined": {
+    "file": "hardline_mcp/claude_inbox.py",
+    "before": "        if self._writer is not None and self._writer.is_alive():\n",
+    "after": "        if False:\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_blocked_inbox_write_is_never_joined_by_a_second"
+    ]
+  },
+  "a-timed-out-write-hands-back-its-writer": {
+    "file": "hardline_mcp/claude_inbox.py",
+    "before": "        exc.writer = writer\n",
+    "after": "        pass\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_blocked_inbox_write_is_never_joined_by_a_second"
+    ]
+  },
+  "a-failed-codex-queue-is-recorded": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "            self._route(\"failed\", f\"{why}; codex queue failed: {result.get('error')}\")\n",
+    "after": "            pass\n",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_failed_queue_records_why_and_counts_nothing"
+    ]
+  },
+  "a-raising-codex-queue-is-recorded": {
+    "file": "hardline_mcp/codex_queue.py",
+    "before": "        except Exception as exc:  # noqa: BLE001 - recorded, then raised as before\n            result = {\"ok\": False, \"error\": f\"{type(exc).__name__}: {exc}\"}\n",
+    "after": "        except Exception as exc:  # noqa: BLE001 - recorded, then raised as before\n            raise\n",
+    "tests": [
+      "tests/test_codex_route_facts.py::test_a_queue_that_raises_is_recorded_as_failed"
+    ]
+  },
+  "stalled-wakes-wait-out-the-grace": {
+    "file": "hardline_mcp/report.py",
+    "before": "        if owed is None or now - owed < GRACE or not waiting:\n",
+    "after": "        if owed is None or not waiting:\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait"
+    ]
+  },
+  "stalled-wakes-need-waiting-mail": {
+    "file": "hardline_mcp/report.py",
+    "before": "        if owed is None or now - owed < GRACE or not waiting:\n",
+    "after": "        if owed is None or now - owed < GRACE:\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait"
+    ]
+  },
+  "stalled-wakes-join-on-the-creation-token": {
+    "file": "hardline_mcp/report.py",
+    "before": "        held = lanes.get((p[\"pid\"], p[\"process_key\"]))\n",
+    "after": "        held = next((v for (pid, _), v in lanes.items() if pid == p[\"pid\"]), None)\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait"
+    ]
+  },
+  "stalled-wakes-skip-the-dead": {
+    "file": "hardline_mcp/report.py",
+    "before": "        if _is_live(s, probe):\n            lanes.setdefault",
+    "after": "        if True:\n            lanes.setdefault",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait"
     ]
   }
 }

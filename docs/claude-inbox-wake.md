@@ -34,7 +34,8 @@ the implementation. Both records are at the end.
 `announce.Announcer` is the notice wake, extracted from Codex queue-wake
 ([design](codex-queue-wake.md)): new mail only, over granted lanes; one notice
 outstanding, reserved before the attempt and released only by its own
-receipt; pending-claim fulfilment; `push_delivery` facts. A subclass gives the
+receipt, a send that may have delivered being sent again after a growing
+wait; pending-claim fulfilment; `push_delivery` facts. A subclass gives the
 client it serves, the notice text, the transport, and - when it is not known
 at startup - how the address is found.
 
@@ -109,8 +110,14 @@ The attempt rule, drawn where Python can see it:
   back.
 - **Write called**, whatever its outcome (a failure, a short count, a timeout):
   it may have been delivered, and the inbox answers neither success nor
-  rejection. It stays outstanding until its receipt, with no timeout, as in
-  Codex. A timed-out write is left to its daemon thread, at most one at a time.
+  rejection. A write that finished is never sent again: the host has the line.
+  One that failed or timed out stays outstanding and is sent again, the same
+  notice with the same nonce, after 300 s, the wait doubling per unsettled
+  attempt up to 1 h, until a receipt (for any copy) settles it, as in Codex.
+  `NotSent` on a resend keeps it unsettled, since the first write may have
+  landed. A timed-out write is left to its daemon thread, which holds the
+  connection; while it lives no second write is made (the resend fails as
+  unsettled and is tried later), so there is at most one writer.
 
 The pipe is opened `"r+b"` because that is the mode that maps to
 `OPEN_EXISTING`, which a named pipe requires; nothing is read.
@@ -134,7 +141,8 @@ post real notices into it.
 - **Claim prose is dropped.** A lane granted with no unread mail wakes nothing;
   `register_session(wait=true)` already returns on the grant.
 - **`crossSessionInbound` `hold` or `refuse`** blocks delivery (measured): the
-  write succeeds, the notice stays outstanding, delivery reads `unreceipted`.
+  write succeeds, the notice stays outstanding (never sent again, having been
+  written), delivery reads `unreceipted`.
   `refuse` is silent; `hold` shows the user a notice and delivers it if
   `accept` later applies (docs). The Monitor is the fallback.
 - **A conversation moved to the background** (`/bg`, 2.1.296, one measured
@@ -161,7 +169,8 @@ post real notices into it.
 - Notice: exactly the constant text; no lane, sender or body bytes even with
   hostile ones.
 - Gate: one notice until its receipt; a connect failure is retried; a failed
-  write stays outstanding.
+  or timed-out write stays outstanding and is sent again, same nonce, after a
+  doubling wait; a finished write never is; no second writer while one lives.
 - Take-back, as a unit: no push in the facts, written at once; the mail due
   again; never after a receipt.
 - Post: auth then message, one write, never a read; any connect failure is

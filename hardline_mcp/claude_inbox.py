@@ -123,7 +123,8 @@ def post(inbox: Inbox, text: str) -> None:
     was delivered. Anything else (a failed or timed-out write) may have
     delivered it. Bounded: a write the host never drains is left to a daemon
     thread, which holds the connection until the host reads or this process
-    exits - at most one, since the notice it carried stays outstanding.
+    exits; the ``TimeoutError`` carries it as ``writer``, so the wake starts no
+    second one while it lives.
     """
     lines = (
         {"type": "auth", "token": inbox.token},
@@ -135,7 +136,9 @@ def post(inbox: Inbox, text: str) -> None:
     writer.start()
     writer.join(SEND_TIMEOUT_S)
     if not outcome:
-        raise TimeoutError(f"inbox write took longer than {SEND_TIMEOUT_S:.0f} s")
+        exc = TimeoutError(f"inbox write took longer than {SEND_TIMEOUT_S:.0f} s")
+        exc.writer = writer
+        raise exc
     if outcome[0] is not None:
         raise outcome[0]
 
@@ -149,8 +152,19 @@ class ClaudeInboxWake(announce.Announcer):
     def notice(self, nonce: str) -> str:
         return notice(nonce)
 
+    _writer: Optional[threading.Thread] = None  # a timed-out write, still blocked
+
     def send(self, inbox: Inbox, text: str) -> None:
-        post(inbox, text)
+        """Post, unless the last timed-out write still holds its connection:
+        that write may yet deliver, and a second beside it is a leak, not a
+        retry. Either way the notice stays unsettled and is tried later."""
+        if self._writer is not None and self._writer.is_alive():
+            raise TimeoutError("the previous notice's write is still blocked; not written again")
+        try:
+            post(inbox, text)
+        except TimeoutError as exc:
+            self._writer = getattr(exc, "writer", None)
+            raise
 
     def arm(self, client: dict) -> None:
         self.declare()  # the address was known from the start

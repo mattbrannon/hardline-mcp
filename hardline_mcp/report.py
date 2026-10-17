@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
+from .delivery import GRACE
 from .jobs import ACTIVE_STATES
 from .mailbox import _iso, _resolve_db
 from .procid import DEAD, instance_state
@@ -58,6 +59,11 @@ NOTES = [
     "row's zeros mean no persisted route outcome, not no notice: a failed queue records none",
     "unread_mail: counts only, nothing is acked or deleted; a registered holder is a session row "
     "not shown dead, not a consumer known to be reading",
+    "codex_routes 'failed': a codex queue that reported failure, its error in last_route_reason, "
+    "uncounted; current code sends such a notice again later",
+    "stalled_wakes: a receipt overdue past the delivery grace while registered lanes hold unread "
+    "mail - the notice may have failed, or the session is busy or ignoring it; not proof of "
+    "either. servers_without_facts are unknown, not well",
 ]
 
 # Each section's rows, read in the snapshot. None marks a table current code
@@ -80,8 +86,10 @@ _READS = {
     # Every row: a wake writes one when it pins its thread, before any notice.
     "routes": "SELECT pid, process_key, last_route, last_route_reason, steered, queued, ambiguous"
     " FROM codex_routes ORDER BY pid",
+    "pushes": "SELECT pid, process_key, oldest_unreceipted_at FROM push_delivery ORDER BY pid",
 }
 _CREATED_ON_USE = {
+    "pushes": "push_delivery",
     "routes": "codex_routes",
     "revisions": "process_revisions",
     "legacy": "sessions",
@@ -109,6 +117,9 @@ def report(db_path: Optional[Path] = None) -> dict:
         ),
         "codex_routes": _section(
             functools.partial(_codex_routes, sessions=read["sessions"]), read, probe, "routes"
+        ),
+        "stalled_wakes": _section(
+            functools.partial(_stalled_wakes, now=now), read, probe, "pushes", "sessions", "unread"
         ),
         "notes": NOTES,
     }
@@ -318,6 +329,59 @@ def _without_row(rows: list, sessions: "list | Exception", probe: Callable) -> "
         if s["lane"].startswith("codex:") and identity not in recorded and _is_live(s, probe):
             lanes.setdefault(identity, []).append(s["lane"])
     return [{"pid": p, "process_key": k, "lanes": v} for (p, k), v in lanes.items()]
+
+
+def _stalled_wakes(
+    pushes: Optional[list], sessions: list, unread: list, *, now: datetime, probe: Callable
+) -> dict:
+    """Servers not shown dead whose wake has owed a receipt for at least
+    ``delivery.GRACE`` (as ``delivery.derive`` reads ``unreceipted``) while
+    their registered lanes hold unread mail. Joined on pid and creation token,
+    against whole unread counts, not the sampled ``unread_mail`` lists.
+
+    An overdue receipt with a backlog, not proof that a transport failed: the
+    session may be busy, or ignoring notices. Narrower than every broken wake:
+    one that never pinned, never sent, or keeps failing NotSent writes no
+    overdue push; nor are lanes held before (announced too) counted here."""
+    if pushes is None:
+        return {"table": False, "stalled": []}
+    backlog = {r["recipient"]: r["n"] for r in unread}
+    lanes: dict[tuple, list] = {}
+    for s in sessions:
+        if _is_live(s, probe):
+            lanes.setdefault((s["pid"], s["process_key"]), []).append(s["lane"])
+    stalled, rows = [], 0
+    for p in pushes:
+        held = lanes.get((p["pid"], p["process_key"]))
+        if held is None:
+            continue  # dead, or registered nothing: no wake to speak for
+        rows += 1
+        owed = _parse(p["oldest_unreceipted_at"])
+        waiting = {lane: backlog[lane] for lane in held if backlog.get(lane)}
+        if owed is None or now - owed < GRACE or not waiting:
+            continue
+        stalled.append({
+            "pid": p["pid"],
+            "process_key": p["process_key"],
+            "oldest_unreceipted_at": p["oldest_unreceipted_at"],
+            "overdue_minutes": int((now - owed).total_seconds() // 60),
+            "unread": waiting,
+        })
+    return {
+        "table": True,
+        "servers_with_facts": rows,  # live registered servers whose wake writes facts
+        "servers_without_facts": len(lanes) - rows,  # older code, or no wake: unknown, not well
+        "stalled": stalled,
+    }
+
+
+def _parse(stamp: Optional[str]) -> Optional[datetime]:
+    """A stored UTC timestamp, or None if absent or unparsable."""
+    try:
+        then = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+    return then if then.tzinfo else then.replace(tzinfo=timezone.utc)
 
 
 def _age_days(created_at: str, now: datetime) -> Optional[int]:
