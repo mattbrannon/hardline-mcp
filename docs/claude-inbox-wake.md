@@ -117,7 +117,9 @@ The attempt rule, drawn where Python can see it:
   `NotSent` on a resend keeps it unsettled, since the first write may have
   landed. A timed-out write is left to its daemon thread, which holds the
   connection; while it lives no second write is made (the resend fails as
-  unsettled and is tried later), so there is at most one writer.
+  unsettled and is tried later), so there is at most one writer. Once it
+  finishes, its outcome answers the resend: a late success is not written
+  again, a late failure is.
 
 The pipe is opened `"r+b"` because that is the mode that maps to
 `OPEN_EXISTING`, which a named pipe requires; nothing is read.

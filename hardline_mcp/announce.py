@@ -186,6 +186,8 @@ class Announcer:
         an attempt counts whatever its outcome, unless the transport says it
         delivered nothing (``take_back``). An unsettled one is due again, the
         same notice, with ``ids`` None: its mail was announced by the first.
+        A resend chosen here is not revalidated before it goes: a receipt that
+        lands meanwhile lets one copy follow settlement, rescheduled by nothing.
         """
         now = self.clock()
         if self.fulfil and (

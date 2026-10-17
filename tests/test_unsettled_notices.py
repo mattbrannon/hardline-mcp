@@ -85,6 +85,33 @@ def test_a_receipt_after_a_resend_settles_it(monkeypatch):
     assert wake.outstanding is None and wake._failures == 0
 
 
+def test_a_receipt_clears_a_pending_resend(monkeypatch):
+    """Receipted before its resend was due: that deadline must not outlive it
+    and resend the next notice, which completed."""
+    wake = _wake(monkeypatch)
+    _, first, _ = wake.poll()
+    wake.unsettled(first, "x")
+    assert wake.accept_receipt(first)
+    rows = [{"id": 1, "recipient": "codex:a"}, {"id": 2, "recipient": "codex:a"}]
+    monkeypatch.setattr(announce.channel, "unread", lambda owned, after=0: (rows, 0))
+    _, second, ids = wake.poll()
+    assert ids == {2} and second != first
+    wake.monotonic.t += announce.MAX_RETRY_S
+    assert wake.poll() is None, "a completed notice was resent on its predecessor's deadline"
+
+
+def test_a_notice_for_lanes_held_before_is_resent_too(monkeypatch):
+    """No new mail on a held lane, only newer mail at a name held before."""
+    wake = _armed(monkeypatch, [], ["codex:a"])
+    wake.monotonic = Clock()
+    monkeypatch.setattr(announce.channel, "waiting_before", lambda: {"codex:old": (9, 1)})
+    address, nonce, ids = wake.poll()
+    assert ids == set()
+    wake.unsettled(nonce, "x")
+    wake.monotonic.t += announce.RETRY_S
+    assert wake.poll() == (address, nonce, None)
+
+
 def test_a_stopped_wake_sends_nothing_again(monkeypatch):
     wake = _wake(monkeypatch)
     _, nonce, _ = wake.poll()
@@ -153,11 +180,14 @@ async def test_a_resend_that_reached_nothing_leaves_the_notice_unsettled(store, 
         await claude(tg, monkeypatch, posts)
         mailbox.send("codex", LANE, "one")
         _, first = await posts.wait(1)
+        (wake,) = [w for w in announce._installed if isinstance(w, claude_inbox.ClaudeInboxWake)]
+        owed = wake.facts["oldest_unreceipted_at"]
         posts.fail = announce.NotSent("pipe busy")
         await posts.wait(2)
         posts.fail = None
         _, third = await posts.wait(3, timeout=10.0)
         assert inbox_nonce(third) == inbox_nonce(first)
+        assert wake.facts["oldest_unreceipted_at"] == owed, "the push is still owed since the first"
         tg.cancel_scope.cancel()
 
 
@@ -200,21 +230,59 @@ def test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait(tmp_path, mon
     assert (got.get("servers_with_facts"), got.get("servers_without_facts")) == (4, 2), got
 
 
-def test_a_blocked_inbox_write_is_never_joined_by_a_second(monkeypatch):
-    """post() abandons the wait, not the writer: retrying beside a write still
-    holding its connection would leak one per retry."""
+def _timed_out_write(monkeypatch, result):
+    """A wake whose write of "notice" timed out; set the returned event to let
+    it finish with ``result`` (None for success), then join ``wake._late``."""
     release = threading.Event()
-    monkeypatch.setattr(claude_inbox, "_write", lambda inbox, payload, outcome: release.wait(30))
+
+    def write(inbox, payload, outcome):
+        release.wait(30)
+        outcome.append(result)
+
+    monkeypatch.setattr(claude_inbox, "_write", write)
     monkeypatch.setattr(claude_inbox, "SEND_TIMEOUT_S", 0.05)
     wake = claude_inbox.ClaudeInboxWake(address=INBOX)
     with pytest.raises(TimeoutError):
         wake.send(INBOX, "notice")
     posts = Posts()
     monkeypatch.setattr(claude_inbox, "post", posts)
+    return wake, release, posts
+
+
+def _finish(wake, release):
+    writer = wake._late[1]
+    release.set()
+    writer.join(5)
+
+
+def test_a_blocked_inbox_write_is_never_joined_by_a_second(monkeypatch):
+    """post() abandons the wait, not the writer: retrying beside a write still
+    holding its connection would leak one per retry."""
+    wake, release, posts = _timed_out_write(monkeypatch, None)
     with pytest.raises(TimeoutError, match="still blocked"):
         wake.send(INBOX, "notice")
     assert posts.calls == [], "no second writer while the first lives"
     release.set()
-    wake._writer.join(5)
+
+
+def test_a_write_that_finished_late_is_not_written_again(monkeypatch):
+    wake, release, posts = _timed_out_write(monkeypatch, None)
+    _finish(wake, release)
+    wake.send(INBOX, "notice")  # the resend: its first write delivered after all
+    assert posts.calls == []
     wake.send(INBOX, "notice")
+    assert len(posts.calls) == 1, "the late outcome answers one send, not every one"
+
+
+def test_a_write_that_failed_late_is_written_again(monkeypatch):
+    wake, release, posts = _timed_out_write(monkeypatch, OSError("broken pipe"))
+    _finish(wake, release)
+    wake.send(INBOX, "notice")
+    assert len(posts.calls) == 1
+
+
+def test_a_late_write_of_a_settled_notice_decides_nothing_for_the_next(monkeypatch):
+    wake, release, posts = _timed_out_write(monkeypatch, None)
+    _finish(wake, release)
+    wake.send(INBOX, "another notice")
     assert len(posts.calls) == 1

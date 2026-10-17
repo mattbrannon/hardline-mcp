@@ -4656,16 +4656,16 @@
   },
   "a-blocked-inbox-write-is-not-joined": {
     "file": "hardline_mcp/claude_inbox.py",
-    "before": "        if self._writer is not None and self._writer.is_alive():\n",
-    "after": "        if False:\n",
+    "before": "            if writer.is_alive():\n",
+    "after": "            if False:\n",
     "tests": [
       "tests/test_unsettled_notices.py::test_a_blocked_inbox_write_is_never_joined_by_a_second"
     ]
   },
   "a-timed-out-write-hands-back-its-writer": {
     "file": "hardline_mcp/claude_inbox.py",
-    "before": "        exc.writer = writer\n",
-    "after": "        pass\n",
+    "before": "            if getattr(exc, \"writer\", None) is not None:\n                self._late = (text, exc.writer, exc.outcome)\n",
+    "after": "            if False:\n                self._late = (text, exc.writer, exc.outcome)\n",
     "tests": [
       "tests/test_unsettled_notices.py::test_a_blocked_inbox_write_is_never_joined_by_a_second"
     ]
@@ -4716,6 +4716,46 @@
     "after": "        if True:\n            lanes.setdefault",
     "tests": [
       "tests/test_unsettled_notices.py::test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait"
+    ]
+  },
+  "a-late-success-is-not-written-again": {
+    "file": "hardline_mcp/claude_inbox.py",
+    "before": "            if late_text == text and outcome and outcome[0] is None:\n                return\n",
+    "after": "            if False:\n                return\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_write_that_finished_late_is_not_written_again"
+    ]
+  },
+  "a-late-failure-is-written-again": {
+    "file": "hardline_mcp/claude_inbox.py",
+    "before": "            if late_text == text and outcome and outcome[0] is None:\n",
+    "after": "            if late_text == text and outcome:\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_write_that_failed_late_is_written_again"
+    ]
+  },
+  "a-late-write-of-another-notice-decides-nothing": {
+    "file": "hardline_mcp/claude_inbox.py",
+    "before": "            if late_text == text and outcome and outcome[0] is None:\n",
+    "after": "            if outcome and outcome[0] is None:\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_late_write_of_a_settled_notice_decides_nothing_for_the_next"
+    ]
+  },
+  "a-late-outcome-answers-one-send": {
+    "file": "hardline_mcp/claude_inbox.py",
+    "before": "        late, self._late = self._late, None\n",
+    "after": "        late = self._late\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_write_that_finished_late_is_not_written_again"
+    ]
+  },
+  "a-receipt-clears-a-pending-resend": {
+    "file": "hardline_mcp/announce.py",
+    "before": "            self._retry_at, self._failures = None, 0  # settled, by any copy that landed\n",
+    "after": "            self._failures = 0\n",
+    "tests": [
+      "tests/test_unsettled_notices.py::test_a_receipt_clears_a_pending_resend"
     ]
   }
 }

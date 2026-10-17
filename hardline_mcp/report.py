@@ -56,7 +56,8 @@ NOTES = [
     "codex_lane_servers_without_row: registered processes not shown dead holding a codex: lane "
     "with no route row - older code, a wake never pinned to a top-level thread (a subagent's "
     "server), a failed write, or not a Codex client at all; their notices are in no total. A "
-    "row's zeros mean no persisted route outcome, not no notice: a failed queue records none",
+    "row's zeros mean no counted route outcome, not no notice: a failed queue is in no count "
+    "(current code records it as last_route 'failed'; older code recorded nothing)",
     "unread_mail: counts only, nothing is acked or deleted; a registered holder is a session row "
     "not shown dead, not a consumer known to be reading",
     "codex_routes 'failed': a codex queue that reported failure, its error in last_route_reason, "

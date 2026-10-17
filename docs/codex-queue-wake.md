@@ -121,7 +121,9 @@ Every 2 s, `CodexWake` follows these steps:
      (300 s), the wait doubling per unsettled attempt up to `MAX_RETRY_S`
      (1 h), until a receipt settles it. A receipt for any copy settles it.
      Each failure that had in fact enqueued costs one extra turn that only
-     points at the inbox; the cap bounds their rate, not their number.
+     points at the inbox; the cap bounds their rate, not their number. A
+     resend already chosen when a receipt arrives still goes out: one copy
+     past settlement, which settles nothing and is never rescheduled.
    - **A broken setup** therefore keeps trying at the growing interval, and
      the session's delivery state reads `unreceipted` meanwhile.
    - **A stopped wake** (a second top-level thread) sends nothing again.

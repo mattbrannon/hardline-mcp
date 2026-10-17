@@ -137,7 +137,7 @@ def post(inbox: Inbox, text: str) -> None:
     writer.join(SEND_TIMEOUT_S)
     if not outcome:
         exc = TimeoutError(f"inbox write took longer than {SEND_TIMEOUT_S:.0f} s")
-        exc.writer = writer
+        exc.writer, exc.outcome = writer, outcome  # the outcome lands there, late
         raise exc
     if outcome[0] is not None:
         raise outcome[0]
@@ -152,18 +152,30 @@ class ClaudeInboxWake(announce.Announcer):
     def notice(self, nonce: str) -> str:
         return notice(nonce)
 
-    _writer: Optional[threading.Thread] = None  # a timed-out write, still blocked
+    # A timed-out write: (its text, its thread, the list its outcome lands in).
+    _late: Optional[tuple[str, threading.Thread, list]] = None
 
     def send(self, inbox: Inbox, text: str) -> None:
-        """Post, unless the last timed-out write still holds its connection:
-        that write may yet deliver, and a second beside it is a leak, not a
-        retry. Either way the notice stays unsettled and is tried later."""
-        if self._writer is not None and self._writer.is_alive():
-            raise TimeoutError("the previous notice's write is still blocked; not written again")
+        """Post, unless a timed-out write of this same notice has an answer.
+
+        While that write still holds its connection it may yet deliver, and a
+        second beside it is a leak, not a retry: the notice stays unsettled.
+        Once it has finished, its outcome is this send's: a late success is
+        delivered, never written again, and a late failure is written again. A
+        late write of another notice - one since settled - decides nothing."""
+        late, self._late = self._late, None
+        if late is not None:
+            late_text, writer, outcome = late
+            if writer.is_alive():
+                self._late = late
+                raise TimeoutError("the previous notice's write is still blocked; not written again")
+            if late_text == text and outcome and outcome[0] is None:
+                return
         try:
             post(inbox, text)
         except TimeoutError as exc:
-            self._writer = getattr(exc, "writer", None)
+            if getattr(exc, "writer", None) is not None:
+                self._late = (text, exc.writer, exc.outcome)
             raise
 
     def arm(self, client: dict) -> None:
