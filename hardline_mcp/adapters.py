@@ -2926,6 +2926,9 @@ def _ask_codex_validated(
     return result
 
 
+_CODEX_GIT_REFUSAL = "--skip-git-repo-check was not specified"
+
+
 def _ask_codex_structured(
     prompt: str,
     argv: list[str],
@@ -2952,6 +2955,11 @@ def _ask_codex_structured(
     neutral_root = None
     run_cwd = workdir
     subscription_configured = None
+    # Codex refuses a cwd outside any git repository (0.162.1 exec/src/lib.rs:
+    # a git-root test only; the flag changes nothing else). That guards writes
+    # with no history to recover them, so a read-only run skips it: it failed
+    # reviews of a scratch folder outright. Once only - clap rejects a repeat.
+    skip_git_check = not write
     if workdir is not None:
         argv += ["-C", workdir]
     if write:
@@ -2965,13 +2973,8 @@ def _ask_codex_structured(
             return error
         subscription_configured = True
         run_cwd = str(Path(neutral_root) / "workspace")
-        argv += [
-            "--ignore-user-config",
-            "--ignore-rules",
-            "--skip-git-repo-check",
-            "-C",
-            run_cwd,
-        ]
+        skip_git_check = True
+        argv += ["--ignore-user-config", "--ignore-rules", "-C", run_cwd]
     instructions = []
     if mode == "advisory":
         instructions.append(_CODEX_ADVISORY_DEVELOPER_INSTRUCTIONS)
@@ -2985,8 +2988,11 @@ def _ask_codex_structured(
             except OSError as exc:
                 return {"ok": False, "error": f"failed to create a neutral directory: {exc}"}
             run_cwd = neutral_root
-            argv += ["-C", run_cwd, "--skip-git-repo-check"]
+            skip_git_check = True
+            argv += ["-C", run_cwd]
         instructions.append(attachment["framing"])
+    if skip_git_check:
+        argv.append("--skip-git-repo-check")
     if instructions:
         # Replaces any configured developer_instructions for this call: the
         # framing must reach the system channel, and Codex has no append.
@@ -3041,6 +3047,12 @@ def _ask_codex_structured(
         if neutral_root:
             shutil.rmtree(neutral_root, ignore_errors=True)
     failed_output = run.pop("_stdout", "")
+    if not run.get("ok") and _CODEX_GIT_REFUSAL in (run.get("error") or ""):
+        run["hint"] = (
+            "Codex writes only inside a git repository (its message says 'trusted', but it "
+            "tests for a repository): run write=True in one, or git init the workdir. "
+            "Read-only runs are not refused."
+        )
     if not run.get("ok"):
         if failed_output:
             parsed = _parse_codex_jsonl(

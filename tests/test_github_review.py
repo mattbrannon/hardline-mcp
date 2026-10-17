@@ -173,7 +173,7 @@ def test_a_codex_reviewer_without_workdir_runs_in_an_empty_directory(world, monk
     child = world.reviewer()
     assert child["kwargs"]["cwd"] == str(neutral)
     assert _flag_value(child["cmd"], "-C") == str(neutral)
-    assert "--skip-git-repo-check" in child["cmd"]
+    assert child["cmd"].count("--skip-git-repo-check") == 1  # clap rejects a repeat
     assert not neutral.exists(), "the neutral directory is removed afterwards"
 
 

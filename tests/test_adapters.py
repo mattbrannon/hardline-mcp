@@ -416,7 +416,7 @@ def test_ask_codex_advisory_isolates_context_and_api_overrides(monkeypatch, tmp_
     argv = calls[0]["cmd"]
     assert "--ignore-user-config" in argv
     assert "--ignore-rules" in argv
-    assert "--skip-git-repo-check" in argv
+    assert argv.count("--skip-git-repo-check") == 1  # clap rejects a repeat
     assert _pin(argv) == "read-only"
     isolated_cwd = neutral_root / "workspace"
     isolated_home = neutral_root / "codex-home"
@@ -561,6 +561,27 @@ def test_ask_codex_write_adds_workspace_write_sandbox(
     assert 'approval_policy="never"' in _overrides(argv)
     assert "-a" not in argv  # codex exec rejects it
     assert argv[argv.index("-C") + 1] == str(tmp_path)
+
+
+_GIT_REFUSAL = "Reading additional input from stdin...\nNot inside a trusted directory and --skip-git-repo-check was not specified."
+
+
+def test_a_read_only_run_skips_codex_git_check_once(monkeypatch, tmp_path):
+    """Seen 2026-10-16: reviews of a scratch folder and a documents folder
+    failed outright on Codex's git check, which guards only writes. Exactly
+    once: clap rejects a repeated flag (advisory's count is checked with it)."""
+    calls = _capture_run(monkeypatch, _FakeCompleted(stdout=_codex_reply("ok")))
+    adapters.ask_codex("review", workdir=str(tmp_path))
+    assert calls[0]["cmd"].count("--skip-git-repo-check") == 1
+
+
+def test_a_write_run_keeps_codex_git_check_and_says_why_it_refused(
+    allow_write, monkeypatch, tmp_path
+):
+    calls = _capture_run(monkeypatch, _FakeCompleted(stderr=_GIT_REFUSAL, returncode=1))
+    out = adapters.ask_codex("patch it", workdir=str(tmp_path), write=True)
+    assert "--skip-git-repo-check" not in calls[0]["cmd"]
+    assert out.get("ok") is False and "git repository" in out.get("hint", ""), out
 
 
 def test_ask_codex_default_pins_the_read_only_sandbox(monkeypatch):

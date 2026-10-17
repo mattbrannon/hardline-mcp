@@ -145,7 +145,8 @@ access included, untouched; see
 [what a Codex reviewer can read](docs/configuration.md#what-a-codex-reviewer-can-read).
 
 Writes require both `write=True` and `HARDLINE_ALLOW_WRITE=1` in the MCP server's
-environment, plus an explicit existing `workdir`. Claude's default read controls
+environment, plus an explicit existing `workdir`; a Codex write also needs that
+`workdir` inside a git repository (a read-only review runs anywhere). Claude's default read controls
 are not a filesystem sandbox. Read [execution modes and write access](docs/configuration.md#execution-modes-and-write-access)
 before enabling unattended edits.
 
