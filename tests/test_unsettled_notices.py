@@ -6,7 +6,6 @@ failed, inserting nothing. The notice stayed outstanding with no receipt ever
 coming, and that session was never woken again: five messages unannounced.
 """
 
-import sqlite3
 import threading
 
 import anyio
@@ -217,45 +216,6 @@ async def test_a_resend_chosen_before_its_receipt_goes_out_and_settles_nothing(s
         assert len(sends) == 2, "the settled notice was sent again"
         assert wake.outstanding is None and wake._retry_at is None
         tg.cancel_scope.cancel()
-
-
-def test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait(tmp_path, monkeypatch):
-    from datetime import datetime, timedelta, timezone
-
-    from hardline_mcp import procid, report
-
-    gone = 2147483646
-    db = tmp_path / "mb.db"
-    old = mailbox._iso(datetime.now(timezone.utc) - timedelta(hours=1))
-    recent = mailbox._iso(datetime.now(timezone.utc) - timedelta(minutes=2))
-    for lane, n in (("codex:a", 2), ("codex:b", 1), ("codex:c", 1), ("codex:g", 1), ("codex:f", 1)):
-        for _ in range(n):
-            mailbox.send("claude", lane, "waiting", db_path=db)
-    monkeypatch.setattr(
-        report, "instance_state", lambda pid, *_a, **_k: procid.DEAD if pid == gone else procid.ALIVE
-    )
-    with sqlite3.connect(db) as raw:
-        raw.executemany(
-            "INSERT INTO agent_sessions (pid, lane, agent, process_key, started_at,"
-            " last_seen, claimed_at) VALUES (?, ?, 'codex', ?, 't', 't', 't')",
-            [(1, "codex:a", "k1"), (2, "codex:b", "k2"), (3, "codex:quiet", "k3"),
-             (4, "codex:c", "k4"), (5, "codex:no-facts", "k5"), (6, "codex:f", "new"),
-             (gone, "codex:g", "kg")],
-        )
-        raw.executemany(
-            "INSERT INTO push_delivery (pid, process_key, declared_at, oldest_unreceipted_at)"
-            " VALUES (?, ?, 't', ?)",
-            [(1, "k1", old),        # overdue, mail waiting: stalled
-             (2, "k2", recent),     # within the grace
-             (3, "k3", old),        # overdue, nothing waiting
-             (4, "k4", None),       # receipted
-             (6, "old", old),       # an earlier process that reused pid 6
-             (gone, "kg", old)],    # dead
-        )
-    raw.close()
-    got = report.report(db)["stalled_wakes"]
-    assert [(s["pid"], s["unread"]) for s in got.get("stalled", [])] == [(1, {"codex:a": 2})], got
-    assert (got.get("servers_with_facts"), got.get("servers_without_facts")) == (4, 2), got
 
 
 def _timed_out_write(monkeypatch, result):

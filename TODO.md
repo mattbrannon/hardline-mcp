@@ -40,7 +40,8 @@ servers run code that records revisions and acks. Against the triggers:
   instance address: per thread, it survives reconnect and resume, and the client
   supplies it. A first design was reviewed and not built; its findings
   (UUIDv7 prefixes collide, subagent results, the identity hook's contract) are
-  on #90.
+  on #90. A subagent's server holds a lane that attracts mail it never
+  announces (#109); `stalled_wakes.unwatched` lists such servers.
 
 Record the outcome in `docs/architecture.md` and, if deferring again, a new
 date here.
