@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        accepted = await _in_thread(channel.accept_receipt, receipt) or await _in_thread(\n            announce.accept_receipt, receipt\n        )",
+  "after": "        accepted = await _in_thread(channel.accept_receipt, receipt)",
+  "tests": [
+    "tests/test_codex_queue.py::test_one_notice_until_its_receipt"
+  ]
+}

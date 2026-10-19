@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "            if turn is None or turn == tried:\n",
+  "after": "            if turn is None:\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_refused_steer_queues_the_same_notice_without_steering_again"
+  ]
+}

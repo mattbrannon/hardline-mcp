@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        next((above for above in reversed(spelling.parents) if not above.exists()), spelling)\n",
+  "after": "        spelling\n",
+  "tests": [
+    "tests/test_adapters.py::test_a_denial_under_a_missing_directory_denies_that_directory"
+  ]
+}

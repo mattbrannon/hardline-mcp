@@ -4,7 +4,7 @@
 #                 Windows-specific, and the subprocess adapters differ subtly
 #                 across OSes) on the supported Python floor and the current
 #                 release, in parallel workers.
-#   mutations     the regression catalog (tests/mutations.json), once.
+#   mutations     the regression catalog (tests/mutations/), once.
 #   codex-sandbox hardline's read-only pin under Codex's own sandbox, live.
 name: ci
 

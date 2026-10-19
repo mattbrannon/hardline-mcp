@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/codex_steer.py",
+  "before": "            raise Ambiguous(f\"no answer to the steer: {type(exc).__name__}: {exc}\") from exc\n",
+  "after": "            raise Unreached(f\"no answer to the steer: {type(exc).__name__}: {exc}\") from exc\n",
+  "tests": [
+    "tests/test_codex_steer.py::test_a_steer_left_unanswered_is_ambiguous",
+    "tests/test_codex_steer.py::test_over_real_pipes_silence_is_bounded_and_ambiguous"
+  ]
+}

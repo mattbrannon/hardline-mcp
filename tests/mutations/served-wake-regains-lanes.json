@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            channel.Pusher(fulfil=_regain_lanes),\n",
+  "after": "            channel.Pusher(fulfil=_fulfil_pending),\n",
+  "tests": [
+    "tests/test_channel.py::test_the_served_wake_regains_lanes"
+  ]
+}

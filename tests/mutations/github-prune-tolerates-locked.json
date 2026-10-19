@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "                removed += 1\n        except OSError:\n            continue",
+  "after": "                removed += 1\n        except ValueError:\n            continue",
+  "tests": [
+    "tests/test_github_context.py::test_pruning_survives_a_file_it_cannot_delete"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        _restored = frozenset(prepared.restored)\n        _claimed_lanes[:] = prepared.claims\n",
+  "after": "        _claimed_lanes[:] = prepared.claims\n        _restored = frozenset(prepared.restored)\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_publication_that_fails_part_way_is_repaired_in_order"
+  ]
+}

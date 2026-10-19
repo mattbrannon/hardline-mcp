@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        if time.monotonic() >= _debt_rest_until[0] and not _pay_owed():\n",
+  "after": "        if not _pay_owed():\n",
+  "tests": [
+    "tests/test_server.py::test_a_store_still_down_costs_one_refusal_per_rest"
+  ]
+}

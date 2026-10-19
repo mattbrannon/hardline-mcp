@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/hints.py",
+  "before": "            conn.execute(\n                \"DELETE FROM lane_hints WHERE rowid NOT IN (\"\n",
+  "after": "            0 and conn.execute(\n                \"DELETE FROM lane_hints WHERE rowid NOT IN (\"\n",
+  "tests": [
+    "tests/test_hints.py::test_hints_are_bounded_newest_kept"
+  ]
+}

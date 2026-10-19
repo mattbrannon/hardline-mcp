@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "    writer.join(SEND_TIMEOUT_S)",
+  "after": "    writer.join()",
+  "tests": [
+    "tests/test_claude_inbox.py::test_a_write_the_host_never_drains_is_abandoned"
+  ]
+}

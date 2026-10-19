@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "        self._route(\"queue\", why)",
+  "after": "        self._route(\"queue\")",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_refused_steer_is_recorded_as_queued_with_the_refusal",
+    "tests/test_codex_route_facts.py::test_a_notice_with_no_turn_seen_says_so"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    result = await _sync_agent(\n        ctx,\n        adapters.ask_codex,",
+  "after": "    result = await _in_thread(\n        adapters.ask_codex,",
+  "tests": [
+    "tests/test_sync_agent.py::test_ask_claude_runs_through_the_cancellable_helper"
+  ]
+}

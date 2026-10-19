@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    name = f\"hardline-{secrets.token_hex(8)}\"\n",
+  "after": "    name = \"hardline\"\n",
+  "tests": [
+    "tests/test_adapters.py::test_every_call_names_a_profile_no_configuration_layer_can_reach"
+  ]
+}

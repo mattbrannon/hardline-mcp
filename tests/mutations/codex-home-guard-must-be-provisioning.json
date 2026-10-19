@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        and not (name.startswith(\".codex-provisioning-\") and name.endswith(\".guard\")\n",
+  "after": "        and not (name.endswith(\".guard\")\n",
+  "tests": [
+    "tests/test_adapters.py::test_a_codex_home_is_denied_but_for_what_a_reviewer_uses"
+  ]
+}

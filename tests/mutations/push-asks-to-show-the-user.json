@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "                f\"receipt='{nonce}'), tell the user who sent each message and \"\n                \"what it says, act, then ack the ids. \"",
+  "after": "                f\"receipt='{nonce}'), act, then ack the ids. \"",
+  "tests": [
+    "tests/test_channel.py::test_lane_mail_is_pushed_once_with_a_receipt_and_bare_mail_never"
+  ]
+}

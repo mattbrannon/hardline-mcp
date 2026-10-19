@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "    running = [p for p in registered if p[\"state\"] != DEAD]\n",
+  "after": "    running = registered\n",
+  "tests": [
+    "tests/test_report.py::test_revisions_are_counted_per_running_process"
+  ]
+}

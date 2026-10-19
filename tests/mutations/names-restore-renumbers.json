@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "            bindings.renumber(conn, thread=thread, pid=pid, key=key, order=final)\n",
+  "after": "",
+  "tests": [
+    "tests/test_thread_names.py::test_the_order_restored_is_the_order_the_next_server_restores"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        lanes=adapters.recipients_before_claim(agent, label),\n        ranked=True,\n",
+  "after": "        lanes=adapters.recipients_before_claim(agent, label),\n",
+  "tests": [
+    "tests/test_sessions.py::test_the_server_registers_its_names_in_order"
+  ]
+}

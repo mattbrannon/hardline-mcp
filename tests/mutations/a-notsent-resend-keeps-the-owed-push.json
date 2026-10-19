@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                            self.unsettled(nonce, f\"not sent: {exc}\")\n",
+  "after": "                            self.facts[\"oldest_unreceipted_at\"] = None\n                            self.unsettled(nonce, f\"not sent: {exc}\")\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_resend_that_reached_nothing_leaves_the_notice_unsettled"
+  ]
+}

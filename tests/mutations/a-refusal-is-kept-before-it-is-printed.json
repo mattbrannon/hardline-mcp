@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        with _debts_lock:\n            _debts[(db_path, job_id)] = write\n        with contextlib.suppress(Exception):  # a closed stderr at exit, say\n            traceback.print_exc()\n",
+  "after": "        traceback.print_exc()\n        with _debts_lock:\n            _debts[(db_path, job_id)] = write\n",
+  "tests": [
+    "tests/test_server.py::test_a_refusal_with_stderr_closed_is_still_kept"
+  ]
+}

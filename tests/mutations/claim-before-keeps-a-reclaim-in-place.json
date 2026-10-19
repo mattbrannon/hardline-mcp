@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    return tuple(r for r in owned_recipients(agent) if claimed or r != lane)",
+  "after": "    return tuple(r for r in owned_recipients(agent) if r != lane)",
+  "tests": [
+    "tests/test_sessions.py::test_reclaiming_a_held_name_does_not_promote_it"
+  ]
+}

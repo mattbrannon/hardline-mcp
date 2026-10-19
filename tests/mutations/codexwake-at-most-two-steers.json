@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "        for _ in range(0 if self.unsteered else 2):\n",
+  "after": "        for _ in range(0 if self.unsteered else 3):\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_second_refusal_queues_even_if_the_turn_moved_again"
+  ]
+}

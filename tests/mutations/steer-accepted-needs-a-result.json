@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_steer.py",
+  "before": "        if error is None and isinstance(reply.get(\"result\"), dict):\n",
+  "after": "        if error is None:\n",
+  "tests": [
+    "tests/test_codex_steer.py::test_an_answer_of_no_documented_shape_is_ambiguous[bare-id]"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "\"INSERT OR REPLACE INTO process_revisions (pid, process_key, revision)\"\n                \" VALUES (?, ?, ?)\",",
+  "after": "\"INSERT OR REPLACE INTO process_revisions\"\n                \" VALUES (?, ?, ?)\",",
+  "tests": [
+    "tests/test_schema_writers.py::test_no_insert_relies_on_a_tables_column_order"
+  ]
+}

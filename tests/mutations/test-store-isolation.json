@@ -1,0 +1,8 @@
+{
+  "file": "tests/conftest.py",
+  "before": "os.environ[\"HARDLINE_DB\"] = str(Path(_store.name) / \"mailbox.db\")",
+  "after": "pass  # defect: inherit the operator's configured store",
+  "tests": [
+    "tests/test_test_isolation.py::test_collection_and_late_workers_use_temporary_store"
+  ]
+}

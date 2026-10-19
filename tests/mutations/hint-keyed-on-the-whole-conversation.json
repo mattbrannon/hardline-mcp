@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "return os.environ.get(\"CLAUDE_CODE_SESSION_ID\", \"\").strip() or None",
+  "after": "return os.environ.get(\"CLAUDE_CODE_SESSION_ID\", \"\").strip()[:8] or None",
+  "tests": [
+    "tests/test_hints.py::test_a_restarted_conversation_is_told_what_it_held_and_holds_none_of_it"
+  ]
+}

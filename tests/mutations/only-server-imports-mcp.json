@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "import anyio\n\nfrom . import adapters, delivery, hints, mailbox, procid, sessions\n",
+  "after": "import anyio\nimport mcp.types  # noqa: F401\n\nfrom . import adapters, delivery, hints, mailbox, procid, sessions\n",
+  "tests": [
+    "tests/test_channel.py::test_only_the_server_module_imports_mcp"
+  ]
+}

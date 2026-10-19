@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "        \"lane\": primary if primary in accepted else (accepted[-1] if accepted else None),\n",
+  "after": "        \"lane\": accepted[-1] if accepted else None,\n",
+  "tests": [
+    "tests/test_sessions.py::test_reclaiming_an_earlier_name_reports_that_name"
+  ]
+}

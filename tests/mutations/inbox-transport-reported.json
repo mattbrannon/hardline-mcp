@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    delivered, transport = (pushed, \"channel\") if pushed else announce.status()",
+  "after": "    delivered, transport = (pushed, \"channel\") if pushed else (announce.status()[0], None)",
+  "tests": [
+    "tests/test_claude_inbox.py::test_the_session_reports_its_transport_and_delivery"
+  ]
+}

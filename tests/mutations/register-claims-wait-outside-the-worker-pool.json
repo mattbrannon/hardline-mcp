@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        _register_session_impl, label, agent, wait, thread, limiter=_REGISTER_LIMITER\n",
+  "after": "        _register_session_impl, label, agent, wait, thread\n",
+  "tests": [
+    "tests/test_sessions.py::test_register_session_does_not_hold_a_shared_worker_slot"
+  ]
+}

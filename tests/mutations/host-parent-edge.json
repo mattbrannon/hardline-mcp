@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/procid.py",
+  "before": "                parent_pid_of(child_pid) != current\n",
+  "after": "                False\n",
+  "tests": [
+    "tests/test_identity.py::test_ancestry_rejects_a_changed_parent_edge"
+  ]
+}

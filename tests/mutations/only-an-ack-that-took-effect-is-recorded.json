@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/mailbox.py",
+  "before": "            if cur.rowcount:\n                _record_acks(conn, [message_id], conversation)\n",
+  "after": "            _record_acks(conn, [message_id], conversation)\n",
+  "tests": [
+    "tests/test_mailbox.py::test_only_the_ack_that_took_effect_is_recorded"
+  ]
+}

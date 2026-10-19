@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/hints.py",
+  "before": "            conn.execute(\"DELETE FROM lane_hints WHERE recipient = ?\", (lane,))\n            if not conversation:\n                return\n",
+  "after": "            if not conversation:\n                return\n            conn.execute(\"DELETE FROM lane_hints WHERE recipient = ?\", (lane,))\n",
+  "tests": [
+    "tests/test_hints.py::test_a_claimant_hardline_cannot_name_clears_the_hint"
+  ]
+}

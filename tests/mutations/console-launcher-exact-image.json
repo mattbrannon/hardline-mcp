@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if launcher.image.lower() == _CONSOLE_LAUNCHER:\n",
+  "after": "    if _launcher_name(launcher.image) in _NESTED_LAUNCHERS:\n",
+  "tests": [
+    "tests/test_identity.py::test_a_posix_hardline_parent_is_an_outer_server"
+  ]
+}

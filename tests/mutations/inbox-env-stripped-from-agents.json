@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        \"CLAUDE_CODE_MESSAGING_SOCKET\",\n        \"CLAUDE_CODE_MESSAGING_TOKEN\",\n",
+  "after": "",
+  "tests": [
+    "tests/test_claude_inbox.py::test_spawned_agents_never_inherit_the_inbox"
+  ]
+}

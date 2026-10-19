@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                raise RuntimeError(\"no process identity to record facts under\")",
+  "after": "                return",
+  "tests": [
+    "tests/test_codex_queue.py::test_facts_wait_for_a_process_identity_rather_than_being_dropped"
+  ]
+}

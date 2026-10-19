@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        return \"launching host exited\"\n",
+  "after": "        return None\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_dead_launching_host_restores_nothing"
+  ]
+}

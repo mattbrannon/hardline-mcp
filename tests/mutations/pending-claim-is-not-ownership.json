@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            \"status\": \"pending\",\n",
+  "after": "            \"ok\": True,\n            \"status\": \"pending\",\n",
+  "tests": [
+    "tests/test_continuity.py::test_a_waiting_claim_is_granted_with_its_backlog_once_the_holder_exits"
+  ]
+}

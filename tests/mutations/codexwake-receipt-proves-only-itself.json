@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "            if self.outstanding is None or self.outstanding[0] != nonce:\n                return False",
+  "after": "            if self.outstanding is None:\n                return False",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_receipt_proves_only_its_own_notice"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "                info = params.get(\"clientInfo\") if isinstance(params, dict) else None\n                name = info.get(\"name\") if isinstance(info, dict) else None\n",
+  "after": "                info = (params or {}).get(\"clientInfo\") or {}\n                name = info.get(\"name\")\n",
+  "tests": [
+    "tests/test_channel.py::test_a_malformed_initialize_is_answered_not_fatal"
+  ]
+}

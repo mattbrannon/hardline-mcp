@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        above, hosts = chain[1:], chain[1:3]\n",
+  "after": "        above = hosts = chain[1:]\n",
+  "tests": [
+    "tests/test_identity.py::test_a_farther_agent_is_not_adopted_as_host"
+  ]
+}

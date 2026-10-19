@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if not sandbox.profile:\n        return _CODEX_NO_SECRET_ENV + [\"--sandbox\", \"workspace-write\" if write else \"read-only\"]\n",
+  "after": "",
+  "tests": [
+    "tests/test_adapters.py::test_ask_codex_on_windows_runs_the_elevated_sandbox_past_the_runtimes[default]"
+  ]
+}

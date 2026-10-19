@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "                self.pointed[lane] = newest\n",
+  "after": "",
+  "tests": [
+    "tests/test_hints.py::test_a_push_names_the_lane_once_and_never_shows_the_mail"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "tests/test_mutation_catalog.py",
+  "before": "                found.append(f\"{name}: {selector}\")\n",
+  "after": "                pass\n",
+  "tests": [
+    "tests/test_mutation_catalog.py::test_the_checks_see_a_stale_anchor_and_a_renamed_test"
+  ]
+}

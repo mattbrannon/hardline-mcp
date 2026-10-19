@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "            entry[\"next\"] = now + REMINDERS[min(entry[\"reminded\"], len(REMINDERS) - 1)]\n",
+  "after": "            entry[\"next\"] = now + REMINDERS[0]\n            for other in self.schedule.values():\n                other[\"next\"] = entry[\"next\"]\n",
+  "tests": [
+    "tests/test_channel.py::test_unread_pushed_mail_is_reminded_on_its_own_schedule"
+  ]
+}

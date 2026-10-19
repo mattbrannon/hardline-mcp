@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "_PROCESS_TELEMETRY = (\"elapsed_s\", \"timeout_s\", \"exit_code\", \"stdin_shortfall\")",
+  "after": "_PROCESS_TELEMETRY = (\"elapsed_s\", \"timeout_s\", \"stdin_shortfall\")",
+  "tests": [
+    "tests/test_adapters.py::test_a_bare_call_reports_how_a_failed_turn_exited"
+  ]
+}

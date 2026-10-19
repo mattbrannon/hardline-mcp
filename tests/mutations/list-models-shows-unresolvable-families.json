@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "\"families\": {f: _runs_as(f, models)[0] for f in sorted(families)},",
+  "after": "\"families\": {f: s for f in sorted(families) if (s := _runs_as(f, models)[0])},",
+  "tests": [
+    "tests/test_model_routing.py::test_list_models_names_each_tool_and_what_it_takes"
+  ]
+}

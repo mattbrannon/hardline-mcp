@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/hints.py",
+  "before": "(conversation, conversation, PER_CONVERSATION)",
+  "after": "(conversation, conversation, ROWS)",
+  "tests": [
+    "tests/test_hints.py::test_hints_are_bounded_newest_kept"
+  ]
+}

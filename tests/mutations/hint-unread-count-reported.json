@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "counts.get(lane, (0, 0))[1]",
+  "after": "counts.get(lane, (0, 0))[0]",
+  "tests": [
+    "tests/test_hints.py::test_a_restarted_conversation_is_told_what_it_held_and_holds_none_of_it"
+  ]
+}

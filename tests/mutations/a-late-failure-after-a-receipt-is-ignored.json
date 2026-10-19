@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "            if self.outstanding is None or self.outstanding[0] != nonce:\n                return\n            self._failures += 1\n",
+  "after": "            self._failures += 1\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_receipt_settles_it_even_when_it_lands_before_the_failure",
+    "tests/test_unsettled_notices.py::test_a_resend_chosen_before_its_receipt_goes_out_and_settles_nothing"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "        f\"Base: {snapshot['base']['ref']} @ {snapshot['base']['sha']} (as of the PR's last \"\n        \"update; the branch may have moved since)\",",
+  "after": "        f\"Base: {snapshot['base']['ref']} @ {snapshot['base']['sha']}\",",
+  "tests": [
+    "tests/test_github_context.py::test_the_base_is_labelled_as_recorded_not_live"
+  ]
+}

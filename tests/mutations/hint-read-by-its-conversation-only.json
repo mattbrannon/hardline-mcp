@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/hints.py",
+  "before": "\"SELECT recipient FROM lane_hints WHERE conversation = ? ORDER BY rowid\", conversation",
+  "after": "\"SELECT recipient FROM lane_hints WHERE ? IS NOT NULL ORDER BY rowid\", conversation",
+  "tests": [
+    "tests/test_hints.py::test_a_name_is_hinted_to_the_conversation_that_held_it_only"
+  ]
+}

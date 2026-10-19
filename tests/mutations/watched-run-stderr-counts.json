@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "                chunks[name].append(piece)\n                heard[0] = time.monotonic()\n",
+  "after": "                chunks[name].append(piece)\n                if name == \"stdout\":\n                    heard[0] = time.monotonic()\n",
+  "tests": [
+    "tests/test_watched_runs.py::test_writing_to_stderr_alone_counts_as_alive"
+  ]
+}

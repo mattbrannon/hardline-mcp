@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/mailbox.py",
+  "before": "            if cur.rowcount:\n                _record_acks(conn, [message_id], conversation)\n",
+  "after": "            if cur.rowcount:\n                conn.commit()\n                _record_acks(conn, [message_id], conversation)\n",
+  "tests": [
+    "tests/test_mailbox.py::test_an_ack_and_its_record_commit_together[ack]"
+  ]
+}

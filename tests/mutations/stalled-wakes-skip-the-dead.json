@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "        if _is_live(s, probe):\n            lanes.setdefault",
+  "after": "        if True:\n            lanes.setdefault",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait"
+  ]
+}

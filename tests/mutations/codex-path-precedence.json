@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if exe := shutil.which(default_exe):\n            return AgentCommand(exe, \"path\")\n        if exe := _discover_codex():\n            return AgentCommand(exe, \"legacy_discovery\")\n",
+  "after": "        if exe := _discover_codex():\n            return AgentCommand(exe, \"legacy_discovery\")\n        if exe := shutil.which(default_exe):\n            return AgentCommand(exe, \"path\")\n",
+  "tests": [
+    "tests/test_adapters.py::test_ask_codex_shells_codex_exec",
+    "tests/test_adapters.py::test_codex_command_override_and_fallback_precedence"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "for glob in \"[]*?\"",
+  "after": "for glob in \"[]\"",
+  "tests": [
+    "tests/test_adapters.py::test_a_denial_codex_cannot_be_given_exactly_refuses_the_call[star]",
+    "tests/test_adapters.py::test_a_denial_codex_cannot_be_given_exactly_refuses_the_call[question]"
+  ]
+}

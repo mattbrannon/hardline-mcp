@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "        for lane in requested:\n            _refusal(conn, lane, pid, probe)\n        with conn:\n",
+  "after": "        with conn:\n",
+  "tests": [
+    "tests/test_sessions.py::test_a_claim_probes_before_it_reserves_the_writer"
+  ]
+}

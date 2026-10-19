@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "parts = [int(part) for part in match.group(2).split(\".\")]",
+  "after": "parts = match.group(2).split(\".\")",
+  "tests": [
+    "tests/test_model_resolution.py::test_generations_compare_numerically"
+  ]
+}

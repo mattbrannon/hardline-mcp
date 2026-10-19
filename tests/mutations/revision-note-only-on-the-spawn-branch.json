@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if not (ref and running and checkout) or now_ref != ref or running == checkout:\n",
+  "after": "    if not (running and checkout) or running == checkout:\n",
+  "tests": [
+    "tests/test_server.py::test_a_checkout_on_another_branch_is_work_in_progress_not_news"
+  ]
+}

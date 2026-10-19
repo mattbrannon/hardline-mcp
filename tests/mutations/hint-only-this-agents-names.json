@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "if lane.startswith(f\"{agent}:\") and lane not in current",
+  "after": "if lane not in current",
+  "tests": [
+    "tests/test_hints.py::test_another_agents_name_is_never_suggested"
+  ]
+}

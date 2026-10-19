@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if any(m[\"slug\"] == name for m in models):\n        return name, None, []",
+  "after": "    if False:\n        return name, None, []",
+  "tests": [
+    "tests/test_model_resolution.py::test_a_letters_only_identifier_the_catalog_lists_is_kept"
+  ]
+}

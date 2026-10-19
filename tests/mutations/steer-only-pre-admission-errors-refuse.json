@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_steer.py",
+  "before": "        if type(code) is int and code in NOT_ADMITTED:\n",
+  "after": "        if error:\n",
+  "tests": [
+    "tests/test_codex_steer.py::test_an_internal_error_may_follow_admission_so_is_ambiguous"
+  ]
+}

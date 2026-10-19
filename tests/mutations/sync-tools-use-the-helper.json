@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    result = await _sync_agent(ctx, plan[\"ask_fn\"], prompt, **plan[\"ask_kwargs\"])",
+  "after": "    result = await _in_thread(plan[\"ask_fn\"], prompt, **plan[\"ask_kwargs\"])",
+  "tests": [
+    "tests/test_sync_agent.py::test_ask_claude_runs_through_the_cancellable_helper"
+  ]
+}

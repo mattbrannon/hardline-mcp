@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                and self.monotonic() >= self._retry_at\n",
+  "after": "                and True\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_an_unsettled_notice_is_due_again_with_its_own_receipt"
+  ]
+}

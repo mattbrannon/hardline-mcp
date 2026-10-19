@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "        new = [r for r in rows if r[\"id\"] not in self.announced]",
+  "after": "        new = list(rows)",
+  "tests": [
+    "tests/test_codex_queue.py::test_deferred_mail_is_not_re_announced"
+  ]
+}

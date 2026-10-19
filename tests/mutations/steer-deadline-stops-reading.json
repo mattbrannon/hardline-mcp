@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_steer.py",
+  "before": "        if remaining <= 0:  # however much more is already waiting\n            raise TimeoutError(\"the daemon did not answer in time\")\n",
+  "after": "        remaining = max(remaining, 0)\n",
+  "tests": [
+    "tests/test_codex_steer.py::test_a_read_past_the_deadline_times_out_even_with_data_waiting"
+  ]
+}

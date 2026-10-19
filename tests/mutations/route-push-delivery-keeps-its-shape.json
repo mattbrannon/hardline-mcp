@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/mailbox.py",
+  "before": "    oldest_unreceipted_at  TEXT,\n    PRIMARY KEY (pid, process_key)",
+  "after": "    oldest_unreceipted_at  TEXT,\n    last_route             TEXT,\n    PRIMARY KEY (pid, process_key)",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_store_initialised_here_still_takes_an_older_revisions_positional_write"
+  ]
+}

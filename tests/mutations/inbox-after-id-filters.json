@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/mailbox.py",
+  "before": "            rows = conn.execute(sql, (*agents, after_id, limit)).fetchall()",
+  "after": "            rows = conn.execute(sql, (*agents, 0, limit)).fetchall()",
+  "tests": [
+    "tests/test_mailbox.py::test_after_id_pages_past_mail_left_unacked"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "        return str(uuid.UUID(value))",
+  "after": "        return value",
+  "tests": [
+    "tests/test_codex_queue.py::test_only_a_top_level_thread_becomes_the_address[not-a-uuid]"
+  ]
+}

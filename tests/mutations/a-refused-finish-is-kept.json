@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        _owe(db_path, job_id, functools.partial(jobs.finish, job_id, result=result, db_path=db_path))\n        return result\n",
+  "after": "        try:\n            jobs.finish(job_id, result=result, db_path=db_path)\n        except Exception:\n            traceback.print_exc()\n        return result\n",
+  "tests": [
+    "tests/test_server.py::test_a_refused_finish_is_paid_on_the_next_look_at_the_job"
+  ]
+}

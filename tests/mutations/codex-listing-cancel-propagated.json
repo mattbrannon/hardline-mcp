@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    names, run = _codex_mcp_servers(exe, env, cwd, on_spawn)\n    if run.get(\"cancelled\"):\n        return None, run\n",
+  "after": "    names, run = _codex_mcp_servers(exe, env, cwd, on_spawn)\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_a_cancel_during_the_listing_stops_the_call"
+  ]
+}

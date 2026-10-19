@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    slots = _async_slots\n",
+  "after": "    adapters.resolve_codex_model(model, mode=mode, workdir=workdir)\n    slots = _async_slots\n",
+  "tests": [
+    "tests/test_server.py::test_ask_codex_async_full_pool_spawns_no_lookup"
+  ]
+}

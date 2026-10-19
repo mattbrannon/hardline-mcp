@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    thread = _pinned_thread()\n    if thread is None:\n        return None, None\n",
+  "after": "    thread = _pinned_thread()\n",
+  "tests": [
+    "tests/test_thread_names.py::test_an_unpinned_server_never_asks"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if exclude or tools != \"none\":\n            return refuse(",
+  "after": "        if False:\n            return refuse(",
+  "tests": [
+    "tests/test_github_review.py::test_invalid_github_options_spawn_nothing[exclude-alone]",
+    "tests/test_github_review.py::test_invalid_github_options_spawn_nothing[tools-alone]"
+  ]
+}

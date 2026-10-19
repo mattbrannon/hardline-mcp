@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        github=ask_kwargs[\"github\"],\n",
+  "after": "",
+  "tests": [
+    "tests/test_github_forwarding.py::test_async_claude_through_the_guard_forwards_github"
+  ]
+}

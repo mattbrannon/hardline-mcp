@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "any(path in Path(cwd).parents for path in access)",
+  "after": "any(Path(cwd).is_relative_to(path) for path in access)",
+  "tests": [
+    "tests/test_adapters.py::test_a_denied_directory_as_the_workdir_stays_denied"
+  ]
+}

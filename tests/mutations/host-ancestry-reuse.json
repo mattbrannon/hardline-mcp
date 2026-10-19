@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/procid.py",
+  "before": "if key is not None and confirmed is not None and key != confirmed:",
+  "after": "if False:",
+  "tests": [
+    "tests/test_identity.py::test_ancestry_stops_when_a_process_changes_during_capture"
+  ]
+}

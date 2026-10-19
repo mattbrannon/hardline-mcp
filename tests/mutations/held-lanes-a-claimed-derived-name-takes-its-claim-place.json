@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    lanes = [derived] if derived and derived not in claims else []\n    return tuple(lanes + list(claims))\n",
+  "after": "    return tuple(dict.fromkeys(([derived] if derived else []) + list(claims)))\n",
+  "tests": [
+    "tests/test_sessions.py::test_claiming_the_derived_name_makes_it_the_advertised_one"
+  ]
+}

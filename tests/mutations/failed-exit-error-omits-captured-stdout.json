@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        said = (stderr if capture_failed_output else stderr or stdout).strip()\n",
+  "after": "        said = (stderr or stdout).strip()\n",
+  "tests": [
+    "tests/test_adapters.py::test_a_silent_failed_exit_does_not_quote_its_stream_in_the_error[claude]",
+    "tests/test_adapters.py::test_a_silent_failed_exit_does_not_quote_its_stream_in_the_error[codex]"
+  ]
+}

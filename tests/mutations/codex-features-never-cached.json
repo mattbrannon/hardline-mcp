@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    return frozenset(names), run\n",
+  "after": "    _codex_features.memo = getattr(_codex_features, \"memo\", None) or (frozenset(names), run)\n    return _codex_features.memo\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_features_are_asked_fresh_on_every_call"
+  ]
+}

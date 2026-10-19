@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "_CODEX_REQUIRED_FEATURES = (\"apps\", \"plugins\")\n",
+  "after": "_CODEX_REQUIRED_FEATURES = (\"apps\",)\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_a_codex_without_the_features_refuses[no-plugins]"
+  ]
+}

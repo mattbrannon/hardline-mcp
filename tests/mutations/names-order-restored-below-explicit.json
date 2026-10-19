@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "                or entry not in restored\n",
+  "after": "                or False\n",
+  "tests": [
+    "tests/test_thread_names.py::test_restored_names_go_in_by_durable_place_below_explicit_ones"
+  ]
+}

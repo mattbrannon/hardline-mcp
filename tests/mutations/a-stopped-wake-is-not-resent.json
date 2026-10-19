@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                not self.stopped\n                and self.outstanding is not None\n",
+  "after": "                self.outstanding is not None\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_stopped_wake_sends_nothing_again"
+  ]
+}

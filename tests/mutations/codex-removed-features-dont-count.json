@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if len(fields) >= 2 and \"removed\" not in fields[1:]:\n",
+  "after": "        if len(fields) >= 2:\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_a_codex_without_the_features_refuses[apps-removed]"
+  ]
+}

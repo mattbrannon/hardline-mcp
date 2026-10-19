@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "    try:\n        return waiting(tuple(held_before()))\n    except Exception as exc:  # noqa: BLE001\n",
+  "after": "    try:\n        return waiting(tuple(held_before()))\n    except OSError as exc:\n",
+  "tests": [
+    "tests/test_hints.py::test_names_held_before_that_cannot_be_read_never_stop_the_mail_held"
+  ]
+}

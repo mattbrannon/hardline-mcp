@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "    if row is None or tuple(row) != snapshot:\n",
+  "after": "    if row is None:\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_changed_candidate_is_skipped_and_the_next_one_restored"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "    if os.environ.get(\"HARDLINE_CODEX_STEER\", \"\").strip() == \"0\":\n",
+  "after": "    if os.environ.get(\"HARDLINE_CODEX_STEER\", \"\").strip() == \"off\":\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_steering_can_be_turned_off"
+  ]
+}

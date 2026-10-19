@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "        if client.get(\"name\") != self.client:\n            return\n",
+  "after": "        if False:\n            return\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_claude_client_is_never_queue_woken",
+    "tests/test_claude_inbox.py::test_a_codex_client_is_never_inbox_woken"
+  ]
+}

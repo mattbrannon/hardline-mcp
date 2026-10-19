@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "[h for h in await _in_thread(_previously_held) if h[\"unread\"]]",
+  "after": "[h for h in await _in_thread(_previously_held)]",
+  "tests": [
+    "tests/test_hints.py::test_a_read_mentions_only_names_with_mail_waiting"
+  ]
+}

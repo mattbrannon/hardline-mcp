@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            \"write\": False,\n            **github_kwargs,\n",
+  "after": "            \"write\": False,\n",
+  "tests": [
+    "tests/test_github_forwarding.py::test_a_redirect_to_chatgpt_carries_the_evidence"
+  ]
+}

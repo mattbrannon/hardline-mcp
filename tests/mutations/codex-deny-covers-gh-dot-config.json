@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "            (home / \".config\", \"gh\"),\n",
+  "after": "",
+  "tests": [
+    "tests/test_adapters.py::test_every_home_gh_may_use_is_denied"
+  ]
+}

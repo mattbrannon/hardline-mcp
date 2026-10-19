@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "        if self.fulfil and (\n            self._last_fulfil is None or now - self._last_fulfil >= timedelta(seconds=FULFIL_S)\n",
+  "after": "        if False and (\n            self._last_fulfil is None or now - self._last_fulfil >= timedelta(seconds=FULFIL_S)\n",
+  "tests": [
+    "tests/test_channel.py::test_the_pusher_completes_a_waiting_claim_and_says_so"
+  ]
+}

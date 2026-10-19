@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "if j[\"owner_key\"] is None and probe(j[\"owner_pid\"], None) != DEAD",
+  "after": "if probe(j[\"owner_pid\"], None) != DEAD",
+  "tests": [
+    "tests/test_report.py::test_records_acting_on_a_pid_alone_are_counted_as_their_consumers_judge_them"
+  ]
+}

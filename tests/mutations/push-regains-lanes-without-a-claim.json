@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "        if self.fulfil and (\n            self._last_fulfil is None or now - self._last_fulfil >= timedelta(seconds=FULFIL_S)\n",
+  "after": "        if self.fulfil and adapters.pending_claims() and (\n            self._last_fulfil is None or now - self._last_fulfil >= timedelta(seconds=FULFIL_S)\n",
+  "tests": [
+    "tests/test_channel.py::test_an_idle_session_refused_its_own_lane_takes_it_when_the_holder_exits"
+  ]
+}

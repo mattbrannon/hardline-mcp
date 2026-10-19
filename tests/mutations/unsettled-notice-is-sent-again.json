@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                        self.unsettled(nonce, f\"{type(exc).__name__}: {exc}\")\n",
+  "after": "                        pass\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_failed_codex_queue_is_queued_again_until_receipted",
+    "tests/test_unsettled_notices.py::test_a_claude_write_that_failed_is_posted_again"
+  ]
+}

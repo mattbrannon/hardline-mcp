@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        kwargs[\"still_wanted\"] = lambda: not cancelled.is_set()\n",
+  "after": "        pass\n",
+  "tests": [
+    "tests/test_sync_agent.py::test_the_guarded_claude_path_is_told_once_cancelled"
+  ]
+}

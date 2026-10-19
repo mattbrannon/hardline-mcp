@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "                    bindings.renumber(conn, thread=thread, pid=pid, key=key, order=requested)\n",
+  "after": "",
+  "tests": [
+    "tests/test_thread_names.py::test_a_claim_from_the_pinned_thread_is_bound_to_it"
+  ]
+}

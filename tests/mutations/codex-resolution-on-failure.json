@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if resolution is not None:\n        # On failure too",
+  "after": "    if resolution is not None and result.get(\"ok\"):\n        # On failure too",
+  "tests": [
+    "tests/test_model_resolution.py::test_resolution_is_reported_when_codex_rejects_the_model"
+  ]
+}

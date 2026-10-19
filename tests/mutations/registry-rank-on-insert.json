@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "            \" COALESCE(?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM agent_sessions WHERE pid = ?)))\",",
+  "after": "            \" COALESCE(NULL + ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM agent_sessions WHERE pid = ?)))\",",
+  "tests": [
+    "tests/test_sessions.py::test_a_derived_lane_granted_after_a_claim_is_not_advertised_over_it",
+    "tests/test_sessions.py::test_a_refused_lane_keeps_its_place_without_being_granted"
+  ]
+}

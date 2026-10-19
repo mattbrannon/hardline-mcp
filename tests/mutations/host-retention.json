@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "host_pid = COALESCE(?, host_pid)",
+  "after": "host_pid = ?",
+  "tests": [
+    "tests/test_identity.py::test_legacy_refresh_keeps_host_binding"
+  ]
+}

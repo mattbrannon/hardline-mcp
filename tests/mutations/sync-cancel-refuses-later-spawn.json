@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        cancelled.set()\n        with anyio.CancelScope(shield=True):",
+  "after": "        with anyio.CancelScope(shield=True):",
+  "tests": [
+    "tests/test_sync_agent.py::test_a_spawn_after_the_cancel_is_refused"
+  ]
+}

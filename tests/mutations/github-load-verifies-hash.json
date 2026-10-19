@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    if snapshot_id(data) != sid:",
+  "after": "    if False:",
+  "tests": [
+    "tests/test_github_context.py::test_a_corrupt_snapshot_is_refused"
+  ]
+}

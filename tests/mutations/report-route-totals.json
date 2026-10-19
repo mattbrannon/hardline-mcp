@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "sum(r[k] or 0 for r in rows)",
+  "after": "0",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_report_shows_each_codex_process_route_and_totals"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "for s in (os.environ, env) if s.get(\"CODEX_HOME\")",
+  "after": "for s in (os.environ,) if s.get(\"CODEX_HOME\")",
+  "tests": [
+    "tests/test_adapters.py::test_advisory_denies_its_copy_of_the_codex_login_too"
+  ]
+}

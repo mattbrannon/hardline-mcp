@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "        declared = False\n",
+  "after": "        await anyio.to_thread.run_sync(self.declare)\n        declared = True\n",
+  "tests": [
+    "tests/test_channel.py::test_a_startup_fault_never_stops_the_tools"
+  ]
+}

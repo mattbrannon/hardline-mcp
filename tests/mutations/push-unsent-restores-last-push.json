@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "            self.facts[\"last_push_at\"] = max(filter(None, written), default=None)\n",
+  "after": "",
+  "tests": [
+    "tests/test_channel.py::test_a_failed_write_is_taken_back_and_retried"
+  ]
+}

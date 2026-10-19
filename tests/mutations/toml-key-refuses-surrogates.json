@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if 0xD800 <= code <= 0xDFFF:\n            return None  # a lone surrogate is not a Unicode scalar value\n",
+  "after": "",
+  "tests": [
+    "tests/test_codex_isolation.py::test_a_name_toml_cannot_express_refuses"
+  ]
+}

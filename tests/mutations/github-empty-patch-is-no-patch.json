@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    if isinstance(entry.get(\"patch\"), str) and entry[\"patch\"]:",
+  "after": "    if \"patch\" in entry:",
+  "tests": [
+    "tests/test_github_context.py::test_a_missing_patch_with_changes_unproven_is_withheld[empty-patch]"
+  ]
+}

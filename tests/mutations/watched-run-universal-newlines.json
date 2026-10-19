@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        return decoded.replace(\"\\r\\n\", \"\\n\").replace(\"\\r\", \"\\n\")\n",
+  "after": "        return decoded\n",
+  "tests": [
+    "tests/test_watched_runs.py::test_output_decodes_as_text_mode_would"
+  ]
+}

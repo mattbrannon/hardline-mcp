@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "        super().declare()\n        self._routes_dirty = True\n",
+  "after": "        super().declare()\n",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_pinned_wake_writes_its_row_before_any_notice"
+  ]
+}

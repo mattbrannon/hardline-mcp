@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "                self.stopped = True\n",
+  "after": "                self.address = thread\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_second_top_level_thread_stops_waking_rather_than_migrating"
+  ]
+}

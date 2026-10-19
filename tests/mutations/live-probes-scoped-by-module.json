@@ -1,0 +1,8 @@
+{
+  "file": "tests/conftest.py",
+  "before": "    return module_name.rsplit(\".\", 1)[-1] in _LIVE_MODULES\n",
+  "after": "    return any(os.environ.get(n) == \"1\" for n in (\"HARDLINE_LIVE_TESTS\", \"HARDLINE_LIVE_WATCH\", \"HARDLINE_TEST_SPAWN\"))\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_live_flags_never_unstub_unit_tests"
+  ]
+}

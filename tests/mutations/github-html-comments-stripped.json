@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    body = _HTML_COMMENT.sub(\"\", snapshot.get(\"body\") or \"\").strip()",
+  "after": "    body = (snapshot.get(\"body\") or \"\").strip()",
+  "tests": [
+    "tests/test_github_context.py::test_html_comments_are_stripped_from_the_description"
+  ]
+}

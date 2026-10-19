@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "model.get(\"visibility\") == \"list\"",
+  "after": "model.get(\"visibility\") != \"hide\"",
+  "tests": [
+    "tests/test_model_resolution.py::test_only_listed_models_are_offered"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/procid.py",
+  "before": "        if captured.key is not None:\n            descendant_key = captured.key\n",
+  "after": "        descendant_key = captured.key\n",
+  "tests": [
+    "tests/test_identity.py::test_unknown_wrapper_retains_verified_descendant_creation_bound"
+  ]
+}

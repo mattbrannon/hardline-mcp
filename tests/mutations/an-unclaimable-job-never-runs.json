@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            _fail_unstarted(db_path, job_id, failed)\n            return failed\n",
+  "after": "            started = True\n",
+  "tests": [
+    "tests/test_server.py::test_a_job_that_cannot_be_claimed_fails_without_running"
+  ]
+}

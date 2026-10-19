@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if not _revision_cache:\n        _revision_cache.append(_read_head())\n    return _revision_cache[0][1] or None\n",
+  "after": "    return _read_head()[1] or None\n",
+  "tests": [
+    "tests/test_server.py::test_a_server_says_when_its_checkout_has_moved"
+  ]
+}

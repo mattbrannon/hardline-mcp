@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "                model_resolution=request.get(\"model_resolution\"),\n",
+  "after": "",
+  "tests": [
+    "tests/test_admission.py::test_queued_cancellation_admits_replacement_while_worker_is_busy"
+  ]
+}

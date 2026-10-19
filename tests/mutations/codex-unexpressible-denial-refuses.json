@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if key is None or any(glob in str(path) for glob in \"[]*?\"):\n",
+  "after": "        if any(glob in str(path) for glob in \"[]*?\"):\n",
+  "tests": [
+    "tests/test_adapters.py::test_a_denial_codex_cannot_be_given_exactly_refuses_the_call[not-toml]"
+  ]
+}

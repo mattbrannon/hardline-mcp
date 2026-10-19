@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "(probe or instance_state)(r[\"owner_pid\"], r[\"owner_key\"])",
+  "after": "(probe or instance_state)(r[\"owner_pid\"], None)",
+  "tests": [
+    "tests/test_identity.py::test_work_owned_by_reused_pid_does_not_block_role"
+  ]
+}

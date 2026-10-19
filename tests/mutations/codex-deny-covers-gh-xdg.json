@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "            (os.environ.get(\"XDG_CONFIG_HOME\"), \"gh\"),\n",
+  "after": "",
+  "tests": [
+    "tests/test_adapters.py::test_every_home_gh_may_use_is_denied"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "                    parsed[\"ok\"] = False\n                    parsed[\"error\"] = run[\"error\"]",
+  "after": "                    pass",
+  "tests": [
+    "tests/test_adapters.py::test_nonzero_exit_with_a_clean_result_is_still_a_failure"
+  ]
+}

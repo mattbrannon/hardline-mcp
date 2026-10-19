@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        unheld = bindings.unheld(thread, f\"{local}:\", adapters.owned_recipients(local))\n",
+  "after": "        unheld = []\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_dispatch_is_refused_while_the_threads_names_are_unheld"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        unbound = bool(thread and lane) and bindings.unbind(lane, thread)\n",
+  "after": "        unbound = False\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_dismissal_of_an_unheld_name_unbinds_it_and_says_so"
+  ]
+}

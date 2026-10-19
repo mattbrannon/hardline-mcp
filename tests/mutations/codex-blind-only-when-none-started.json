@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if len(not_started) < len(commands):\n        return response\n",
+  "after": "",
+  "tests": [
+    "tests/test_adapters.py::test_some_commands_not_starting_is_counted_not_demoted"
+  ]
+}

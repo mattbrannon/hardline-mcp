@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "{what} not recorded: {type(exc).__name__}: {exc}\")",
+  "after": "{what} not recorded: {type(exc).__name__}: {exc}\")\n                return",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_failed_push_write_does_not_lose_the_route_write"
+  ]
+}

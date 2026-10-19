@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    atexit.register(_settle_at_exit)\n",
+  "after": "",
+  "tests": [
+    "tests/test_server.py::test_a_clean_exit_pays_what_a_running_dispatch_still_owes"
+  ]
+}

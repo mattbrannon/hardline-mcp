@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "        if self.fulfil and (\n            self._last_fulfil is None or now - self._last_fulfil >= timedelta(seconds=channel.FULFIL_S)\n",
+  "after": "        if self.fulfil and adapters.pending_claims() and (\n            self._last_fulfil is None or now - self._last_fulfil >= timedelta(seconds=channel.FULFIL_S)\n",
+  "tests": [
+    "tests/test_claude_inbox.py::test_the_wake_regains_lanes_with_no_claim_waiting"
+  ]
+}

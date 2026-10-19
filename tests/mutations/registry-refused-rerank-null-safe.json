@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "                            \" WHERE pid = ? AND lane = ? AND process_key IS ?\",",
+  "after": "                            \" WHERE pid = ? AND lane = ? AND process_key = ?\",",
+  "tests": [
+    "tests/test_sessions.py::test_a_process_without_a_token_reranks_its_own_rows"
+  ]
+}

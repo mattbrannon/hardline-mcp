@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    while len(parts) > 1 and parts[-1] == 0:\n        parts.pop()\n",
+  "after": "",
+  "tests": [
+    "tests/test_model_resolution.py::test_an_unresolvable_family_passes_through_literally"
+  ]
+}

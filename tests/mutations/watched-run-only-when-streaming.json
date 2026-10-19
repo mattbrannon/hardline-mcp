@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        idle_s = _idle_for(agent) if streaming else None\n",
+  "after": "        idle_s = _idle_for(agent)\n",
+  "tests": [
+    "tests/test_watched_runs.py::test_only_a_streaming_agent_run_is_watched"
+  ]
+}

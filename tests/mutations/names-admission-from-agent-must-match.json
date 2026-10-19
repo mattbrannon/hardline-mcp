@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if adapters.base_agent(from_agent) != local:\n",
+  "after": "    if False:\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_from_agent_that_is_not_this_session_is_refused"
+  ]
+}

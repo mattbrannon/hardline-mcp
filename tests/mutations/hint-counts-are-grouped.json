@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "\" AND acked_at IS NULL GROUP BY recipient\",",
+  "after": "\" AND acked_at IS NULL GROUP BY recipient LIMIT 1\",",
+  "tests": [
+    "tests/test_hints.py::test_counts_are_exact_however_much_is_waiting"
+  ]
+}

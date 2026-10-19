@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "            due = [r for r in due if r[\"recipient\"] in held][:BATCH]\n",
+  "after": "            due = due[:BATCH]\n",
+  "tests": [
+    "tests/test_channel.py::test_a_lane_this_process_lists_but_does_not_hold_is_not_pushed"
+  ]
+}

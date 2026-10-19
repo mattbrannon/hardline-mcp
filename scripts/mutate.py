@@ -28,6 +28,15 @@ import xml.etree.ElementTree as ET
 
 _CAUGHT = ("assert ", "AssertionError", "Failed: DID NOT RAISE")
 _LEFT: list[str] = []  # every temporary tree made, to report any cleanup left
+CATALOG = Path("tests/mutations")  # one <name>.json per case, so PRs never share a line
+
+
+def load(source: Path) -> dict[str, dict]:
+    """The catalog: each case file's stem is its name."""
+    return {
+        path.stem: json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted((source / CATALOG).glob("*.json"))
+    }
 
 
 def _kill_tree(pid: int) -> None:
@@ -196,7 +205,7 @@ def main() -> int:
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
     args = parser.parse_args()
     source = Path(__file__).resolve().parents[1]
-    catalog = json.loads((source / "tests/mutations.json").read_text(encoding="utf-8"))
+    catalog = load(source)
     for name in args.cases:
         if name not in catalog:
             parser.error(f"unknown mutation: {name}")

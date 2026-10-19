@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        argv += [\"--ignore-user-config\", \"--ignore-rules\", \"-C\", run_cwd]\n",
+  "after": "        argv += [\"--ignore-user-config\", \"--ignore-rules\", \"--skip-git-repo-check\", \"-C\", run_cwd]\n",
+  "tests": [
+    "tests/test_adapters.py::test_ask_codex_advisory_isolates_context_and_api_overrides"
+  ]
+}

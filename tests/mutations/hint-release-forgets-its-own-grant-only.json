@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        _forget(lane, own_grant=True)\n",
+  "after": "        _forget(lane, own_grant=False)\n",
+  "tests": [
+    "tests/test_hints.py::test_a_release_never_forgets_a_newer_grants_hint"
+  ]
+}

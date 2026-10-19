@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    with _identity_lock:\n        refused = adapters.claim_lane(label)\n",
+  "after": "    with contextlib.nullcontext():\n        refused = adapters.claim_lane(label)\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job",
+    "tests/test_thread_names.py::test_claims_and_jobs_publish_under_the_identity_lock"
+  ]
+}

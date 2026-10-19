@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        and _CODEX_NOT_STARTED in str(c.get(\"aggregated_output\") or \"\")\n",
+  "after": "",
+  "tests": [
+    "tests/test_adapters.py::test_a_command_that_ran_and_failed_is_ordinary"
+  ]
+}

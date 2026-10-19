@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "        if asked.get((pid_, key_), DEAD) == DEAD:\n",
+  "after": "        if (pid_, key_) not in asked:\n",
+  "tests": [
+    "tests/test_sessions.py::test_an_answer_that_would_grant_is_asked_again_inside_the_writer"
+  ]
+}

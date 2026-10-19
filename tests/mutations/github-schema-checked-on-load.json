@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    if not isinstance(snapshot, dict) or snapshot.get(\"schema\") != SCHEMA:",
+  "after": "    if not isinstance(snapshot, dict):",
+  "tests": [
+    "tests/test_github_context.py::test_a_snapshot_of_another_schema_is_refused"
+  ]
+}

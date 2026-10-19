@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "        atomic=False,\n        ranked=ranked,\n    )\n",
+  "after": "        atomic=False,\n        ranked=ranked,\n        binding=\"unbind\",\n    )\n",
+  "tests": [
+    "tests/test_thread_names.py::test_an_automatic_grant_leaves_a_binding_alone"
+  ]
+}

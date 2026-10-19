@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        \"write\": write,\n        **github_kwargs,\n    }\n",
+  "after": "        \"write\": write,\n    }\n",
+  "tests": [
+    "tests/test_github_forwarding.py::test_direct_claude_forwards_read_tools",
+    "tests/test_github_forwarding.py::test_the_reserve_guard_forwards_github"
+  ]
+}

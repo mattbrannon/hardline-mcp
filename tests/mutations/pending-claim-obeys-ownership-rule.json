@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            result = _register_locked(label, record.agent, wait=False, thread=record.thread)\n",
+  "after": "            result = {\"ok\": adapters.claim_lane(label) is None, \"lane\": f\"{record.agent}:{label}\"}\n",
+  "tests": [
+    "tests/test_continuity.py::test_a_waiting_claim_is_never_granted_while_the_holder_lives"
+  ]
+}

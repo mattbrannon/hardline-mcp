@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        sessions.record_revision(_code_revision())\n",
+  "after": "        pass\n",
+  "tests": [
+    "tests/test_sessions.py::test_list_agents_names_the_revision_each_server_runs"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        if time.monotonic() >= deadline:\n            return False\n",
+  "after": "",
+  "tests": [
+    "tests/test_server.py::test_no_write_starts_past_the_exit_deadline"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        *gh_homes,\n",
+  "after": "",
+  "tests": [
+    "tests/test_adapters.py::test_ask_codex_on_windows_pins_mxc_with_the_secrets_denied"
+  ]
+}

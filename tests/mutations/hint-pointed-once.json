@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "            self.pointed.update(told)\n",
+  "after": "",
+  "tests": [
+    "tests/test_hints.py::test_mail_at_a_name_held_before_wakes_the_session_per_newer_mail"
+  ]
+}

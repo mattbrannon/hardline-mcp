@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    inherited = claimed[\"inherited_unread\"]\n",
+  "after": "    inherited = 0\n",
+  "tests": [
+    "tests/test_sessions.py::test_a_claim_says_what_mail_it_came_with"
+  ]
+}

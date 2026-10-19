@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "held = [path for path in denied if opens(path)]\n",
+  "after": "held = []\n",
+  "tests": [
+    "tests/test_adapters.py::test_the_policy_probe[file-open]",
+    "tests/test_adapters.py::test_the_policy_probe[directory-open]"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if streaming:\n        default = _STREAMING_TIMEOUT_S\n    else:\n",
+  "after": "    if False:\n        default = _STREAMING_TIMEOUT_S\n    else:\n",
+  "tests": [
+    "tests/test_watched_runs.py::test_only_a_streaming_agent_run_is_watched"
+  ]
+}

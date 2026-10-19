@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    if ref.pin and not pull",
+  "after": "    if False and not pull",
+  "tests": [
+    "tests/test_github_context.py::test_a_pin_that_is_not_the_head_fails_collection"
+  ]
+}

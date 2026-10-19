@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "            new = [r for r in new if r[\"recipient\"] in held]",
+  "after": "            new = new",
+  "tests": [
+    "tests/test_codex_queue.py::test_mail_on_an_ungranted_lane_is_not_announced"
+  ]
+}

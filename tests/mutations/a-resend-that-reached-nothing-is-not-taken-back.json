@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                        if ids is None:  # a resend: the first may still have landed\n",
+  "after": "                        if False:\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_resend_that_reached_nothing_leaves_the_notice_unsettled"
+  ]
+}

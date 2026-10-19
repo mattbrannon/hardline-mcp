@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/mailbox.py",
+  "before": "            conn.execute(_ADDED_COLUMNS_PROBE)\n            return conn\n",
+  "after": "            return conn\n",
+  "tests": [
+    "tests/test_identity.py::test_a_cached_process_survives_an_older_revisions_rebuild",
+    "tests/test_identity.py::test_one_connection_restores_whatever_a_rebuild_left_out"
+  ]
+}

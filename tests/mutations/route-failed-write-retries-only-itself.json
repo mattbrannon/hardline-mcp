@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                    setattr(self, flag, True)",
+  "after": "                    setattr(self, \"_dirty\", True)",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_failed_route_write_does_not_lose_the_push_write"
+  ]
+}

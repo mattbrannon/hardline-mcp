@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            owned=verify,\n",
+  "after": "            owned=owned,\n",
+  "tests": [
+    "tests/test_ownership.py::test_consumption_rechecks_conflict_after_preflight"
+  ]
+}

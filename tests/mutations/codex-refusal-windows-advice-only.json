@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "                        if _ON_WINDOWS\n                        else \"\"\n",
+  "after": "                        if True\n                        else \"\"\n",
+  "tests": [
+    "tests/test_adapters.py::test_off_windows_a_sandbox_that_starts_nothing_refuses_without_windows_advice"
+  ]
+}

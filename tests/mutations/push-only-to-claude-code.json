@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "        if client.get(\"name\") != CLIENT:\n",
+  "after": "        if False:\n",
+  "tests": [
+    "tests/test_channel.py::test_a_client_that_is_not_claude_code_is_never_pushed_to"
+  ]
+}

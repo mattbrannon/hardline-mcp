@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        jobs.mark_running(job_id, db_path=db_path)\n        jobs.finish(job_id, result=result, db_path=db_path)\n",
+  "after": "        if jobs.mark_running(job_id, db_path=db_path):\n            jobs.finish(job_id, result=result, db_path=db_path)\n",
+  "tests": [
+    "tests/test_server.py::test_a_claim_that_committed_and_then_raised_still_ends"
+  ]
+}

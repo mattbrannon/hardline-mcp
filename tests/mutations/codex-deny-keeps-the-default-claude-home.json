@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "[home / \".claude\", Path(os.environ.get(\"CLAUDE_CONFIG_DIR\") or home / \".claude\")]",
+  "after": "[Path(os.environ.get(\"CLAUDE_CONFIG_DIR\") or home / \".claude\")]",
+  "tests": [
+    "tests/test_adapters.py::test_both_claude_homes_are_denied"
+  ]
+}

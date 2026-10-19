@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    token = procid.identity_token(launcher.pid, launcher.key)\n",
+  "after": "    token = procid.identity_token(hosts[0].pid, hosts[0].key) if hosts else None\n",
+  "tests": [
+    "tests/test_identity.py::test_codex_threads_under_one_daemon_share_a_host_not_a_lane"
+  ]
+}

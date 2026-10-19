@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "if j[\"child_pid\"] and j[\"child_key\"] is None and probe",
+  "after": "if j[\"child_pid\"] and probe",
+  "tests": [
+    "tests/test_report.py::test_records_acting_on_a_pid_alone_are_counted_as_their_consumers_judge_them"
+  ]
+}

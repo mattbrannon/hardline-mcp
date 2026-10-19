@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "            if started.get(\"cancelled\"):\n                return started\n",
+  "after": "",
+  "tests": [
+    "tests/test_adapters.py::test_a_cancel_during_the_mxc_preflight_stops_the_call"
+  ]
+}

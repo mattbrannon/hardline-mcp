@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    _stage(_settle_debts)\n",
+  "after": "",
+  "tests": [
+    "tests/test_server.py::test_an_idle_session_pays_its_debts_on_its_wake_cycle"
+  ]
+}

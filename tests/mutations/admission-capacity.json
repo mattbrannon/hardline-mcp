@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if not slots.acquire(blocking=False):",
+  "after": "    if not slots.acquire(blocking=False) and False:",
+  "tests": [
+    "tests/test_admission.py::test_concurrent_admission_bounds_running_and_queued"
+  ]
+}

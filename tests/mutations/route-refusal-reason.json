@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "            why = f\"steer refused: {outcome.detail}\"",
+  "after": "            why = \"steer refused\"",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_refused_steer_is_recorded_as_queued_with_the_refusal"
+  ]
+}

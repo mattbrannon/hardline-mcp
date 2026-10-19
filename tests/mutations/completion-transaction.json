@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/jobs.py",
+  "before": "            if not changed.rowcount:\n",
+  "after": "            conn.commit()  # defect: result precedes notice transaction\n            if not changed.rowcount:\n",
+  "tests": [
+    "tests/test_completion.py::test_result_and_notice_commit_together"
+  ]
+}

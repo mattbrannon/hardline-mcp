@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "        held = lanes.get((p[\"pid\"], p[\"process_key\"]))\n",
+  "after": "        held = next((v for (pid, _), v in lanes.items() if pid == p[\"pid\"]), None)\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait"
+  ]
+}

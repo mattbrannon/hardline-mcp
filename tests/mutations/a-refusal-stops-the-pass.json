@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            return False\n        with _debts_lock:\n",
+  "after": "            continue\n        with _debts_lock:\n",
+  "tests": [
+    "tests/test_server.py::test_a_store_still_down_costs_one_refusal_per_rest"
+  ]
+}

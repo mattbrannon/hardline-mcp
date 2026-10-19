@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        slots.release()\n\n    future.add_done_callback(finished)",
+  "after": "\n    future.add_done_callback(finished)",
+  "tests": [
+    "tests/test_admission.py::test_receipt_reports_queued_without_waiting_and_completion_releases_slot"
+  ]
+}

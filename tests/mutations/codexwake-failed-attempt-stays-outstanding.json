@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "            raise RuntimeError(f\"codex queue failed: {result.get('error')}\")",
+  "after": "            raise announce.NotSent(f\"codex queue failed: {result.get('error')}\")",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_failed_attempt_stays_outstanding"
+  ]
+}

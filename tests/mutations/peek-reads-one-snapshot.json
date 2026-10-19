@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/mailbox.py",
+  "before": "        conn.execute(\"BEGIN\")\n        try:\n            recorded = conn.execute(\n",
+  "after": "        try:\n            recorded = conn.execute(\n",
+  "tests": [
+    "tests/test_mailbox.py::test_peek_reads_an_ack_and_its_acker_from_one_snapshot"
+  ]
+}

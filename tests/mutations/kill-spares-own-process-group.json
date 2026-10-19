@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/jobs.py",
+  "before": "            if group == os.getpgid(0):\n                raise PermissionError(\"the child shares this process's group\")\n",
+  "after": "",
+  "tests": [
+    "tests/test_jobs.py::test_kill_never_signals_its_own_process_group"
+  ]
+}

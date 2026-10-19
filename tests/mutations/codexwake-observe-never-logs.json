@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "                self._notes.append(\n                    f\"codex wake stopped:",
+  "after": "                announce.channel._log(\n                    f\"codex wake stopped:",
+  "tests": [
+    "tests/test_codex_queue.py::test_observe_leaves_logging_to_the_poll_thread"
+  ]
+}

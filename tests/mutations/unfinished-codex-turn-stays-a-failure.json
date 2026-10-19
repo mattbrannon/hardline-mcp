@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "            if parsed.get(\"ok\") and run.get(\"timed_out\"):\n                return _completed_before_the_stop(parsed, run)\n            # Otherwise",
+  "after": "            if run.get(\"timed_out\"):\n                return _completed_before_the_stop(parsed, run)\n            # Otherwise",
+  "tests": [
+    "tests/test_watched_runs.py::test_a_codex_turn_cut_off_mid_answer_is_still_a_failure"
+  ]
+}

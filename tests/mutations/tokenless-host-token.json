@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "(r[\"process_key\"] is None or r[\"host_pid\"] is not None and r[\"host_key\"] is None)",
+  "after": "(r[\"process_key\"] is None)",
+  "tests": [
+    "tests/test_report.py::test_records_acting_on_a_pid_alone_are_counted_as_their_consumers_judge_them"
+  ]
+}

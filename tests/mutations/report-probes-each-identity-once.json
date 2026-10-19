@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "    probe = functools.lru_cache(maxsize=None)(instance_state)  # once per identity\n",
+  "after": "    probe = instance_state\n",
+  "tests": [
+    "tests/test_report.py::test_probes_run_once_per_identity_after_the_snapshot_closes"
+  ]
+}

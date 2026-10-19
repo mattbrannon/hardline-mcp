@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/delivery.py",
+  "before": "(pid, process_key, *(routes.get(k) for k in ROUTE_KEYS))",
+  "after": "(pid, process_key, *(None for k in ROUTE_KEYS))",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_steered_notice_is_recorded_as_steered"
+  ]
+}

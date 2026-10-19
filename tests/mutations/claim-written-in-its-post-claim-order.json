@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        lanes=adapters.recipients_before_claim(agent, label),",
+  "after": "        lanes=adapters.owned_recipients(agent),",
+  "tests": [
+    "tests/test_sessions.py::test_the_claim_itself_writes_the_order_it_leaves"
+  ]
+}

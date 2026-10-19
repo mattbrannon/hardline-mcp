@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    managed = [\"--permission-profile\", profile[0], \"--include-managed-config\"] if profile else []\n",
+  "after": "    managed = []\n",
+  "tests": [
+    "tests/test_adapters.py::test_the_preflight_loads_managed_requirements_as_exec_does"
+  ]
+}

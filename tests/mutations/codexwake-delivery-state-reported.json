@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    delivered, transport = (pushed, \"channel\") if pushed else announce.status()",
+  "after": "    delivered, transport = (pushed, \"channel\") if pushed else (None, None)",
+  "tests": [
+    "tests/test_codex_queue.py::test_the_session_reports_its_delivery_state"
+  ]
+}

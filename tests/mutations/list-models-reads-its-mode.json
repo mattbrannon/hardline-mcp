@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    models, reason = _codex_catalog(mode, workdir)\n    if models is None:\n        return {\"error\": reason}\n",
+  "after": "    models, reason = _codex_catalog(\"default\", workdir)\n    if models is None:\n        return {\"error\": reason}\n",
+  "tests": [
+    "tests/test_model_routing.py::test_list_models_reads_the_catalog_its_options_name"
+  ]
+}

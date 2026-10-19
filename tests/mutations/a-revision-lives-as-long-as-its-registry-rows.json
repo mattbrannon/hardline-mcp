@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "    \"FROM process_revisions WHERE NOT EXISTS (SELECT 1 FROM agent_sessions s\"\n",
+  "after": "    \"FROM process_revisions WHERE 0 AND NOT EXISTS (SELECT 1 FROM agent_sessions s\"\n",
+  "tests": [
+    "tests/test_sessions.py::test_a_live_session_names_its_recorded_revision_until_it_dies"
+  ]
+}

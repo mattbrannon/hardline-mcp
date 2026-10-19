@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "                conn.execute(\"SAVEPOINT candidate\")\n",
+  "after": "                free -= 1\n                conn.execute(\"SAVEPOINT candidate\")\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_changed_candidate_is_skipped_and_the_next_one_restored"
+  ]
+}

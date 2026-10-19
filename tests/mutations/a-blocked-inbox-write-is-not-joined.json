@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "            if writer.is_alive():\n",
+  "after": "            if False:\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_blocked_inbox_write_is_never_joined_by_a_second"
+  ]
+}

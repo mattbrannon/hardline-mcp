@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "            bindings.withdraw(conn, lane=lane, pid=pid, key=key, thread=thread)\n            rerank(conn, pid=pid, key=key, order=order)\n",
+  "after": "            rerank(conn, pid=pid, key=key, order=order)\n",
+  "tests": [
+    "tests/test_thread_names.py::test_releasing_a_claimed_derived_name_keeps_the_lane_at_its_place"
+  ]
+}

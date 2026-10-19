@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "_CODEX_NO_CONNECTORS = [\"-c\", \"features.apps=false\", \"-c\", \"features.plugins=false\"]\n",
+  "after": "_CODEX_NO_CONNECTORS = [\"-c\", \"features.plugins=false\"]\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_every_codex_child_gets_no_connectors_and_no_servers[plain]",
+    "tests/test_codex_isolation.py::test_every_codex_child_gets_no_connectors_and_no_servers[advisory]"
+  ]
+}

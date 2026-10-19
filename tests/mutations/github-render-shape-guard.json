@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    except (KeyError, TypeError, AttributeError) as exc:\n        raise CollectionError(f\"snapshot has an unexpected shape",
+  "after": "    except ZeroDivisionError as exc:\n        raise CollectionError(f\"snapshot has an unexpected shape",
+  "tests": [
+    "tests/test_github_context.py::test_a_misshapen_snapshot_is_a_collection_error_not_a_crash"
+  ]
+}

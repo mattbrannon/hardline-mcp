@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "            if getattr(exc, \"writer\", None) is not None:\n                self._late = (text, exc.writer, exc.outcome)\n",
+  "after": "            if False:\n                self._late = (text, exc.writer, exc.outcome)\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_blocked_inbox_write_is_never_joined_by_a_second"
+  ]
+}

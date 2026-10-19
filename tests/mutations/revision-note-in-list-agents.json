@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if revision_note := await _in_thread(_revision_note):\n        you[\"revision_note\"] = revision_note\n",
+  "after": "",
+  "tests": [
+    "tests/test_server.py::test_a_server_says_when_its_checkout_has_moved"
+  ]
+}

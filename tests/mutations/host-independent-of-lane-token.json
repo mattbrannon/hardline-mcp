@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    host = next(\n",
+  "after": "    if not token:\n        return blank\n    host = next(\n",
+  "tests": [
+    "tests/test_identity.py::test_known_host_survives_an_unverifiable_wrapper"
+  ]
+}

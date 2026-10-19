@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "    if not isinstance(notice, dict) or notice.get(\"type\") != \"job_finished\":\n",
+  "after": "    if not isinstance(notice, dict):\n",
+  "tests": [
+    "tests/test_report.py::test_any_body_is_free_text"
+  ]
+}

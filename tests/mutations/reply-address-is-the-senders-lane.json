@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        sender, sender_note = _reply_address(from_agent)\n",
+  "after": "        sender, sender_note = from_agent, None\n",
+  "tests": [
+    "tests/test_reply_address.py::test_a_bare_sender_naming_this_session_is_sent_as_its_lane"
+  ]
+}

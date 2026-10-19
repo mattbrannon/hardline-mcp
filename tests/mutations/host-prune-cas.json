@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "AND host_pid IS ? AND host_key IS ?",
+  "after": "AND (? IS NULL OR 1) AND (? IS NULL OR 1)",
+  "tests": [
+    "tests/test_identity.py::test_prune_preserves_replaced_host_identity"
+  ]
+}

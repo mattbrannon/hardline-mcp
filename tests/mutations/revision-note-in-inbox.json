@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if revision_note := await _in_thread(_new_revision_note):\n        response[\"revision_note\"] = revision_note\n",
+  "after": "",
+  "tests": [
+    "tests/test_server.py::test_inbox_says_a_moved_checkout_once_per_revision"
+  ]
+}

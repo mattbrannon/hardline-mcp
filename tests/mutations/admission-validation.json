@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if error:\n        return {**error, \"accepted\": False, \"dispatched\": False}",
+  "after": "    if error and False:\n        return {**error, \"accepted\": False, \"dispatched\": False}",
+  "tests": [
+    "tests/test_admission.py::test_invalid_request_is_rejected_before_admission"
+  ]
+}

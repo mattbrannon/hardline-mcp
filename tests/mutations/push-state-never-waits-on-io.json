@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "            if not self.facts.get(\"oldest_unreceipted_at\"):\n                self.facts[\"oldest_unreceipted_at\"] = now\n            snapshot = self._snapshot()\n        self._write(snapshot)\n",
+  "after": "            if not self.facts.get(\"oldest_unreceipted_at\"):\n                self.facts[\"oldest_unreceipted_at\"] = now\n            snapshot = self._snapshot()\n            self._write(snapshot)\n",
+  "tests": [
+    "tests/test_channel.py::test_reading_delivery_state_never_waits_on_a_fact_write"
+  ]
+}

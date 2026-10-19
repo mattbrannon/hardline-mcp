@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/bindings.py",
+  "before": "        \" AND ((pid = ? AND process_key IS ?) OR (? IS NOT NULL AND thread = ?))\",\n        (lane, pid, key, thread, thread),\n",
+  "after": "        \" AND (? OR ? OR ? OR ? OR 1)\",\n        (lane, pid, key, thread, thread),\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_release_leaves_another_threads_binding_by_another_writer"
+  ]
+}

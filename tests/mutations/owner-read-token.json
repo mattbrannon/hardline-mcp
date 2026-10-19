@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/jobs.py",
+  "before": "instance_state(job[\"owner_pid\"], job[\"owner_key\"])",
+  "after": "instance_state(job[\"owner_pid\"], None)",
+  "tests": [
+    "tests/test_identity.py::test_reused_owner_pid_is_lost_without_affecting_new_instance"
+  ]
+}

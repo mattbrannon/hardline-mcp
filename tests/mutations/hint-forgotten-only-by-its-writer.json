@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/hints.py",
+  "before": "\" AND (? IS NULL OR writer = ?)\",",
+  "after": "\" AND (? IS NULL OR writer = ? OR 1)\",",
+  "tests": [
+    "tests/test_hints.py::test_a_writer_forgets_only_the_hint_its_grant_wrote"
+  ]
+}

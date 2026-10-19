@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_steer.py",
+  "before": "            if \"error\" in init:\n                raise RuntimeError(f\"initialize refused: {init['error']}\")\n",
+  "after": "",
+  "tests": [
+    "tests/test_codex_steer.py::test_a_failure_before_the_steer_is_written_is_unreached[initialize-refused]"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "coverage = \"partial\" if partial or not complete_listing else \"complete\"",
+  "after": "coverage = \"partial\" if partial else \"complete\"",
+  "tests": [
+    "tests/test_github_context.py::test_fewer_files_listed_than_changed_is_partial"
+  ]
+}

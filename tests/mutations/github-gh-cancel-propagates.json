@@ -1,0 +1,10 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if result.get(\"cancelled\"):\n            raise _GhCancelled(result)\n",
+  "after": "",
+  "tests": [
+    "tests/test_github_review.py::test_a_cancel_at_the_first_gh_call_stops_the_call",
+    "tests/test_github_review.py::test_a_cancel_at_a_later_gh_call_stops_the_call[at-files]",
+    "tests/test_github_review.py::test_a_cancel_at_a_later_gh_call_stops_the_call[at-recheck]"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "            elif mine and lane in listed:\n",
+  "after": "            elif mine:\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_restoration_whose_local_half_was_lost_is_repaired"
+  ]
+}

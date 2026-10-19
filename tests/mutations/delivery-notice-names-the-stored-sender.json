@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "new message #{result['message_id']} from {sender}. ",
+  "after": "new message #{result['message_id']} from {from_agent}. ",
+  "tests": [
+    "tests/test_reply_address.py::test_the_delivery_notice_names_the_stored_sender"
+  ]
+}

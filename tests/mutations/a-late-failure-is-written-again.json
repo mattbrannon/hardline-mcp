@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "            if late_text == text and outcome and outcome[0] is None:\n",
+  "after": "            if late_text == text and outcome:\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_write_that_failed_late_is_written_again"
+  ]
+}
