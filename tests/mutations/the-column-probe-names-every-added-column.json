@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/mailbox.py",
+  "before": "    + \", \".join(f\"{table}.{name}\" for table, columns in _ADDED_COLUMNS.items() for name in columns)\n",
+  "after": "    + \", \".join(f\"{table}.{name}\" for table, columns in _ADDED_COLUMNS.items() for name in list(columns)[:1])\n",
+  "tests": [
+    "tests/test_identity.py::test_one_connection_restores_whatever_a_rebuild_left_out"
+  ]
+}

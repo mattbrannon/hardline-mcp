@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/bindings.py",
+  "before": "            raise\n        return None\n",
+  "after": "            raise\n        return []\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_store_without_the_table_says_so"
+  ]
+}

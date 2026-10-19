@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "                self._route(\"ambiguous\", f\"steer unconfirmed: {exc}\")  # may have landed",
+  "after": "                self._route(\"steer\")  # may have landed",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_steer_that_may_have_landed_is_not_claimed_as_steered"
+  ]
+}

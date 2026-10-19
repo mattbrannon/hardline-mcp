@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "    if thread is None or turn.get(\"thread_id\") not in (None, thread):\n",
+  "after": "    if thread is None:\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_thread_id_that_disagrees_with_its_turn_metadata_is_ignored"
+  ]
+}

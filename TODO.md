@@ -65,7 +65,7 @@ repeatedly to matter.
 - Session-to-session mail watched working on the real store, Claude to Codex
   and Claude to Claude (see "Not yet verified live" in `CLAUDE.md`).
 - The mutation harness and an isolated test store (#25): `scripts/mutate.py`,
-  `tests/mutations.json`, run in CI.
+  `tests/mutations/`, run in CI.
 - Process-instance binding (#29): job owners carry `owner_key`, and a session
   whose launching host exited is dead, so an orphaned server no longer holds
   its lane.

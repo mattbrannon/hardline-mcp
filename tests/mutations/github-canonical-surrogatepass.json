@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    ).encode(\"utf-8\", \"surrogatepass\")",
+  "after": "    ).encode(\"utf-8\")",
+  "tests": [
+    "tests/test_github_context.py::test_a_lone_surrogate_cannot_break_hashing_or_delivery"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "                return _completed_before_the_stop(parsed, run)  # as Codex's twin\n",
+  "after": "                pass\n",
+  "tests": [
+    "tests/test_watched_runs.py::test_a_claude_result_that_came_before_the_stop_is_the_answer"
+  ]
+}

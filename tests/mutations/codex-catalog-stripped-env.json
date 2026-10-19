@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    for name in _AGENT_CHILD_STRIPPED_ENV:\n        env.pop(name, None)\n    try:\n        run = _run_cmd(",
+  "after": "    try:\n        run = _run_cmd(",
+  "tests": [
+    "tests/test_model_resolution.py::test_lookup_strips_what_every_spawned_codex_loses"
+  ]
+}

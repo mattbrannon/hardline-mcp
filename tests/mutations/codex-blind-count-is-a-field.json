@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    response = {**response, \"commands_not_started\": len(not_started)}\n",
+  "after": "    response = dict(response)\n",
+  "tests": [
+    "tests/test_adapters.py::test_some_commands_not_starting_is_counted_not_demoted",
+    "tests/test_adapters.py::test_not_starting_survives_a_damaged_stream"
+  ]
+}

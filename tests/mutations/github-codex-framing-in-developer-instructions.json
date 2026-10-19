@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        instructions.append(attachment[\"framing\"])\n",
+  "after": "",
+  "tests": [
+    "tests/test_github_review.py::test_a_codex_reviewer_gets_the_evidence_on_stdin_and_no_web",
+    "tests/test_github_review.py::test_a_patch_github_omitted_is_partial_and_the_reviewer_is_told"
+  ]
+}

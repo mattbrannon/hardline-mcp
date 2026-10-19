@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if lane:\n        _forget(lane, own_grant=True)\n",
+  "after": "",
+  "tests": [
+    "tests/test_hints.py::test_releasing_a_name_forgets_it"
+  ]
+}

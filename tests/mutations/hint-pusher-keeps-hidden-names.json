@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "        for lane, (newest, _) in sorted(waiting_before().items()):\n",
+  "after": "        self.pointed = {k: v for k, v in self.pointed.items() if k in held_before()}\n        for lane, (newest, _) in sorted(waiting_before().items()):\n",
+  "tests": [
+    "tests/test_hints.py::test_a_push_names_the_lane_once_and_never_shows_the_mail"
+  ]
+}

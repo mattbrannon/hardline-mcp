@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    # Every call, bare ones included, reads Codex's JSONL events: only they\n    # show a turn whose commands never started (#47), which plain text hides.\n    attachment = None\n",
+  "after": "    if _is_plain_call(model, effort, mode, workdir, write, github):\n        env = {**os.environ, **sandbox.env}\n        isolation, refusal = _codex_isolation(argv[0], env, None, on_spawn)\n        if refusal is not None:\n            return refusal\n        return _run_agent_cmd(\n            \"codex\",\n            argv + [\"--sandbox\", \"read-only\"] + isolation + [\"--\", prompt],\n            env=env,\n            on_spawn=on_spawn,\n        )\n    attachment = None\n",
+  "tests": [
+    "tests/test_adapters.py::test_a_bare_call_detects_a_turn_whose_commands_never_started"
+  ]
+}

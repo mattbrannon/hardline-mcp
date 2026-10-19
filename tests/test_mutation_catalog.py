@@ -6,16 +6,17 @@ milliseconds, on every platform, with the suite.
 """
 
 import importlib.util
-import json
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CASES = json.loads((ROOT / "tests" / "mutations.json").read_text(encoding="utf-8"))
 
 _spec = importlib.util.spec_from_file_location("mutate", ROOT / "scripts" / "mutate.py")
 mutate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mutate)
+
+CASES = mutate.load(ROOT)
+KEYS = {"file", "before", "after", "tests"}
 
 
 def stale(cases: dict) -> list[str]:
@@ -45,6 +46,28 @@ def unselected(cases: dict) -> list[str]:
     return found
 
 
+def malformed(cases: dict) -> list[str]:
+    """Cases without exactly the four keys, or with no test to run."""
+    return [
+        name
+        for name, case in cases.items()
+        if case.keys() != KEYS or not isinstance(case["tests"], list) or not case["tests"]
+    ]
+
+
+def test_every_case_has_the_four_keys_and_some_tests():
+    assert malformed(CASES) == []
+
+
+def test_case_names_are_safe_and_distinct_on_a_case_insensitive_disk():
+    assert [n for n in CASES if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", n)] == []
+    assert len({n.lower() for n in CASES}) == len(CASES)
+
+
+def test_the_old_single_file_catalog_is_not_back():
+    assert not (ROOT / "tests" / "mutations.json").exists()
+
+
 def test_every_anchor_appears_exactly_once():
     assert stale(CASES) == []
 
@@ -62,3 +85,11 @@ def test_the_checks_see_a_stale_anchor_and_a_renamed_test():
     }
     assert stale({"x": case}) == ["x: stale or ambiguous mutation anchor"]
     assert unselected({"x": case}) == ["x: tests/test_server.py::test_renamed_long_ago[param]"]
+
+
+def test_the_checks_see_a_misspelled_key_and_an_empty_selection():
+    case = {"file": "f", "before": "b", "after": "a", "tests": ["t::x"]}
+    assert malformed({"ok": case}) == []
+    typo = {"file": "f", "before": "b", "after": "a", "test": ["t::x"]}
+    assert malformed({"typo": typo}) == ["typo"]
+    assert malformed({"empty": {**case, "tests": []}}) == ["empty"]

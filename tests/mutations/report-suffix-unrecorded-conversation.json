@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "    if not conversation:\n        return \"conversation_unrecorded\"\n",
+  "after": "    conversation = conversation or \"\"\n",
+  "tests": [
+    "tests/test_report.py::test_an_ack_with_no_conversation_is_unrecorded_not_a_mismatch"
+  ]
+}

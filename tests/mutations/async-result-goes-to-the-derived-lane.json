@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    recipient = _result_lane(from_agent)\n",
+  "after": "    recipient = adapters.lane_for(from_agent)\n",
+  "tests": [
+    "tests/test_server.py::test_a_result_goes_to_the_lane_a_relaunch_gets_back"
+  ]
+}

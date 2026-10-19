@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "        except Exception as exc:  # noqa: BLE001 - recorded, then raised as before\n            result = {\"ok\": False, \"error\": f\"{type(exc).__name__}: {exc}\"}\n",
+  "after": "        except Exception as exc:  # noqa: BLE001 - recorded, then raised as before\n            raise\n",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_queue_that_raises_is_recorded_as_failed"
+  ]
+}

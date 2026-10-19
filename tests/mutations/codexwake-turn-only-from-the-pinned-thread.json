@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "            if thread == self.address:\n                self.turn",
+  "after": "            if True:\n                self.turn",
+  "tests": [
+    "tests/test_codex_queue.py::test_only_the_pinned_threads_calls_leave_a_turn"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "_CODEX_FAMILY = re.compile(r\"[A-Za-z]+\")",
+  "after": "_CODEX_FAMILY = re.compile(r\"[A-Za-z0-9]+\")",
+  "tests": [
+    "tests/test_model_resolution.py::test_identifiers_pass_through_without_a_lookup"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "                (r[\"pid\"], r[\"process_key\"])\n                for r in sessions\n",
+  "after": "                (r[\"pid\"], r[\"lane\"])\n                for r in sessions\n",
+  "tests": [
+    "tests/test_report.py::test_records_acting_on_a_pid_alone_are_counted_as_their_consumers_judge_them"
+  ]
+}

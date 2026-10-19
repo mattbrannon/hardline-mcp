@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "    if conn.execute(f\"SELECT 1 {_ORPHAN_REVISIONS} LIMIT 1\").fetchone():\n",
+  "after": "    if dead and conn.execute(f\"SELECT 1 {_ORPHAN_REVISIONS} LIMIT 1\").fetchone():\n",
+  "tests": [
+    "tests/test_sessions.py::test_a_revision_goes_with_its_registry_rows_however_they_go"
+  ]
+}

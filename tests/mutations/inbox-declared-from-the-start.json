@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "        self.declare()  # the address was known from the start",
+  "after": "        pass",
+  "tests": [
+    "tests/test_claude_inbox.py::test_the_session_reports_its_transport_and_delivery"
+  ]
+}

@@ -28,8 +28,9 @@ pull request cancels the run in flight. No numeric coverage threshold is
 configured.
 
 The mutation runner verifies regression tests against defects catalogued in
-`tests/mutations.json`. It checks every anchor first, then runs one baseline in
-which each case's selected tests must execute and pass, then each exact
+`tests/mutations/`, one JSON file per case. It checks every anchor first, then
+runs one baseline in which each case's selected tests must execute and pass,
+then each exact
 mutation in a worker's own copy of the source; only a regression assertion
 failure counts. `--jobs` sets the workers (default: one per CPU). Pass case
 names to run a subset.

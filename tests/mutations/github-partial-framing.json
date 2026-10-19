@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "        if manifest[\"coverage\"] == \"complete\"",
+  "after": "        if True",
+  "tests": [
+    "tests/test_github_context.py::test_framing_names_the_nonce_and_scopes_partial_reviews"
+  ]
+}

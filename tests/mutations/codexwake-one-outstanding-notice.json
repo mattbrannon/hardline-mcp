@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "            if self.stopped or self.outstanding is not None:\n                return None\n            self.announced",
+  "after": "            if self.stopped:\n                return None\n            self.announced",
+  "tests": [
+    "tests/test_codex_queue.py::test_one_notice_until_its_receipt",
+    "tests/test_codex_queue.py::test_reading_the_mail_is_not_evidence_the_notice_ran"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "parent, depth=5, child=procid.current_identity()",
+  "after": "parent, depth=3, child=procid.current_identity()",
+  "tests": [
+    "tests/test_identity.py::test_a_hardline_an_agent_child_starts_is_still_nested"
+  ]
+}

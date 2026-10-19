@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/jobs.py",
+  "before": "(state = ? AND result IS NULL)",
+  "after": "(state = ?)",
+  "tests": [
+    "tests/test_completion.py::test_cancelled_completion_notifies_once"
+  ]
+}

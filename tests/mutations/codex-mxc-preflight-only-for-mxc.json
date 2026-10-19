@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if sandbox.profile:\n            started = _codex_sandbox_started(\n",
+  "after": "        if True:\n            started = _codex_sandbox_started(\n",
+  "tests": [
+    "tests/test_adapters.py::test_only_mxc_is_preflighted[elevated]"
+  ]
+}

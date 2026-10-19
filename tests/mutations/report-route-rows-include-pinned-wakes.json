@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": " FROM codex_routes ORDER BY pid\",",
+  "after": " FROM codex_routes WHERE last_route IS NOT NULL ORDER BY pid\",",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_report_shows_each_codex_process_route_and_totals"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "            if turn is None or turn == tried:\n",
+  "after": "            if turn is None or tried is not None:\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_refusal_is_steered_again_once_for_a_turn_that_moved"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        argv += [\"-c\", 'approval_policy=\"never\"']\n",
+  "after": "        argv += [\"-a\", \"never\"]\n",
+  "tests": [
+    "tests/test_adapters.py::test_mxc_write_pins_the_workspace_profile",
+    "tests/test_adapters.py::test_ask_codex_write_still_gets_workspace_write"
+  ]
+}

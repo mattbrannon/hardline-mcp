@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        parsed.setdefault(\"process_error\", error[:_EVIDENCE_TAIL])\n",
+  "after": "        pass\n",
+  "tests": [
+    "tests/test_adapters.py::test_a_parsed_failure_keeps_the_process_error_beside_it",
+    "tests/test_adapters.py::test_an_answer_already_failed_by_the_parser_is_partial_under_a_failed_run"
+  ]
+}

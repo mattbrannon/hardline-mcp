@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "_CODEX_FAMILY_SLUG = re.compile(r\"([a-z]+)-(\\d+(?:\\.\\d+)*)-([a-z]+)\")",
+  "after": "_CODEX_FAMILY_SLUG = re.compile(r\"([a-z]+)-(\\d+(?:\\.\\d+)*)-([a-z]+)(?:-.*)?\")",
+  "tests": [
+    "tests/test_model_resolution.py::test_only_prefix_generation_family_slugs_qualify"
+  ]
+}

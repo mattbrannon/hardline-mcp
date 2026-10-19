@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        _restored = _restored - {label}\n        _claimed_lanes.append(label)\n",
+  "after": "        _claimed_lanes.append(label)\n        _restored = _restored - {label}\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_claim_whose_origin_cleanup_fails_is_left_unclaimed_and_retried"
+  ]
+}

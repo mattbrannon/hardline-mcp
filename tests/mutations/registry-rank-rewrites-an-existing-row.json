@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": " seq = COALESCE(?, seq)\"",
+  "after": " seq = COALESCE(NULL + ?, seq)\"",
+  "tests": [
+    "tests/test_sessions.py::test_a_derived_lane_granted_after_a_claim_is_not_advertised_over_it"
+  ]
+}

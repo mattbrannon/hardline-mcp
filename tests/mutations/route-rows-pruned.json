@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/delivery.py",
+  "before": "        for table in (\"push_delivery\", \"codex_routes\"):",
+  "after": "        for table in (\"push_delivery\",):",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_routes_of_a_dead_process_are_pruned"
+  ]
+}

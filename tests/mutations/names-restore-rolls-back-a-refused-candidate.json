@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "                    conn.execute(\"ROLLBACK TO candidate\")\n",
+  "after": "",
+  "tests": [
+    "tests/test_thread_names.py::test_a_candidate_refused_after_its_writes_is_rolled_back_alone"
+  ]
+}

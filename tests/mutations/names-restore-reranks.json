@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "            rerank(conn, pid=pid, key=key, order=final)\n",
+  "after": "",
+  "tests": [
+    "tests/test_thread_names.py::test_the_threads_names_come_back_in_their_order"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            commands[agent] = {\"error\": f\"{type(exc).__name__}: {exc}\"}\n",
+  "after": "            commands[agent] = {\"executable\": agent, \"source\": \"bare\"}\n",
+  "tests": [
+    "tests/test_server.py::test_a_failed_resolution_is_that_agents_error_alone"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "            functools.partial(_codex_routes, sessions=read[\"sessions\"]), read, probe, \"routes\"\n",
+  "after": "            functools.partial(_codex_routes, sessions=read[\"sessions\"]), read, probe, \"routes\", \"sessions\"\n",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_registry_that_will_not_read_leaves_the_route_rows_standing"
+  ]
+}

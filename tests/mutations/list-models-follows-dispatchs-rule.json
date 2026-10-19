@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "\"families\": {f: _runs_as(f, models)[0] for f in sorted(families)},",
+  "after": "\"families\": {f: _select_codex_family(f, models)[0] for f in sorted(families)},",
+  "tests": [
+    "tests/test_model_routing.py::test_a_family_name_listed_as_a_model_runs_as_itself"
+  ]
+}

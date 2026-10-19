@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "            _kill_tree(proc)\n            try:\n                proc.wait(timeout=_DRAIN_S)",
+  "after": "            proc.kill()\n            try:\n                proc.wait(timeout=_DRAIN_S)",
+  "tests": [
+    "tests/test_watched_runs.py::test_a_limit_kills_the_tree_and_drains_it"
+  ]
+}

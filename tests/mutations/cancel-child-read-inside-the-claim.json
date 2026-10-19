@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/jobs.py",
+  "before": "        job = {**job, **dict(current)}",
+  "after": "        job = {**job, **dict(conn.execute(\"SELECT child_pid, child_key FROM jobs WHERE job_id = ?\", (job_id,)).fetchone())}",
+  "tests": [
+    "tests/test_jobs.py::test_cancel_kills_the_child_even_when_finish_clears_it_after_the_claim"
+  ]
+}

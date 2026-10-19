@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "            claimed, unrecorded = True, True",
+  "after": "            claimed = True",
+  "tests": [
+    "tests/test_github_review.py::test_a_child_that_could_not_be_recorded_says_so"
+  ]
+}

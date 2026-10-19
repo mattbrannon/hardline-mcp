@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "            self.pointed = self._previous_pointed\n",
+  "after": "",
+  "tests": [
+    "tests/test_hints.py::test_a_pointer_taken_back_is_told_again"
+  ]
+}

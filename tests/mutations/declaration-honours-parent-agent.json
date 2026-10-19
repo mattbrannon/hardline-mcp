@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    known = self_agent()\n",
+  "after": "    known = _declared_agent[0] if _declared_agent else intrinsic_agent()\n",
+  "tests": [
+    "tests/test_identity.py::test_a_process_known_by_its_parent_cannot_declare_another_agent"
+  ]
+}

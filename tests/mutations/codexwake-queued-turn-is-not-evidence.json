@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "                    f\"this connection, pinned to {self.address}\"\n                )\n",
+  "after": "                    f\"this connection, pinned to {self.address}\"\n                )\n            if thread == self.address and turn.get(\"turn_trigger\") == \"queue\":\n                self.outstanding = None\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_only_the_receipt_releases_a_notice_not_a_queued_turn"
+  ]
+}

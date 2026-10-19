@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        elif (code < 0x20 and char != \"\\t\") or code == 0x7F:\n",
+  "after": "        elif code < 0x20 and char != \"\\t\":\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_any_server_name_is_addressed_by_a_quoted_key"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if len(prefixes) > 1:",
+  "after": "    if False:",
+  "tests": [
+    "tests/test_model_resolution.py::test_an_unresolvable_family_passes_through_literally"
+  ]
+}

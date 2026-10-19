@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    finally:\n        if neutral_root:\n            shutil.rmtree(neutral_root, ignore_errors=True)\n    if not run.get(\"ok\"):",
+  "after": "    finally:\n        pass\n    if not run.get(\"ok\"):",
+  "tests": [
+    "tests/test_model_resolution.py::test_advisory_lookup_runs_in_an_isolated_home"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if value != \"elevated\" or restored is None:",
+  "after": "    if restored is None:",
+  "tests": [
+    "tests/test_adapters.py::test_only_the_elevated_sandbox_is_redirected[unelevated]"
+  ]
+}

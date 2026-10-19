@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/jobs.py",
+  "before": "AND (owner_key IS NULL OR owner_key = ?) AND",
+  "after": "AND (owner_key IS NULL OR owner_key = ? OR 1) AND",
+  "tests": [
+    "tests/test_identity.py::test_previous_owner_cannot_start_attach_or_finish"
+  ]
+}

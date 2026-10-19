@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    with _claim_mutex:\n        return _release_or_cancel(label)\n",
+  "after": "    return _release_or_cancel(label)\n",
+  "tests": [
+    "tests/test_continuity.py::test_release_is_serialized_against_fulfilment"
+  ]
+}

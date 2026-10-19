@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        while not _pay_owed(deadline) and time.monotonic() < deadline:\n",
+  "after": "        while time.monotonic() >= _debt_rest_until[0] and not _pay_owed(deadline) and time.monotonic() < deadline:\n",
+  "tests": [
+    "tests/test_server.py::test_a_clean_exit_pays_past_the_rest"
+  ]
+}

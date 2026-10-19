@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_steer.py",
+  "before": "            while chunk := self.proc.stdout.read(65536):\n",
+  "after": "            while chunk := self.proc.stdout.read1(65536):\n",
+  "tests": [
+    "tests/test_codex_steer.py::test_over_real_pipes_a_steer_is_accepted_and_the_proxy_reaped"
+  ]
+}

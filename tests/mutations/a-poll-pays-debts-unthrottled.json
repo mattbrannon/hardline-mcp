@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    _settle_debts()\n    now = time.monotonic()\n",
+  "after": "    now = time.monotonic()\n",
+  "tests": [
+    "tests/test_server.py::test_the_next_poll_pays_a_debt_before_reading"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        [exe, \"mcp\", \"list\", \"--json\", *_CODEX_NO_CONNECTORS],\n",
+  "after": "        [_prefix_for(\"codex\")[0], \"mcp\", \"list\", \"--json\", *_CODEX_NO_CONNECTORS],\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_the_executable_is_resolved_once_for_probes_and_launch"
+  ]
+}

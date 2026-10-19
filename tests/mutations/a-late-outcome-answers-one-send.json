@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "        late, self._late = self._late, None\n",
+  "after": "        late = self._late\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_write_that_finished_late_is_not_written_again"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "started = jobs.mark_running(job_id, db_path=db_path)",
+  "after": "started = jobs.mark_running(job_id)",
+  "tests": [
+    "tests/test_completion.py::test_worker_retains_dispatch_store"
+  ]
+}

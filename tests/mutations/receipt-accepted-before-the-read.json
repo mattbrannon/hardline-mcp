@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    accepted = None\n    if receipt:\n        accepted = await _in_thread(channel.accept_receipt, receipt) or await _in_thread(\n            announce.accept_receipt, receipt\n        )\n",
+  "after": "    accepted = None\n    if receipt:\n        await _in_thread(_consume, mailbox.inbox, agents, auto_ack=False)\n        accepted = await _in_thread(channel.accept_receipt, receipt) or await _in_thread(\n            announce.accept_receipt, receipt\n        )\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_receipt_counts_even_when_the_read_fails"
+  ]
+}

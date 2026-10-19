@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        with _identity_lock:\n            # Deliver back to THIS session's lane",
+  "after": "        with contextlib.nullcontext():\n            # Deliver back to THIS session's lane",
+  "tests": [
+    "tests/test_thread_names.py::test_a_claim_cannot_publish_between_a_dispatchs_recipient_and_its_job"
+  ]
+}

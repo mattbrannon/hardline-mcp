@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "                    _debts[key] = _debts.pop(key)\n",
+  "after": "                    pass\n",
+  "tests": [
+    "tests/test_server.py::test_a_refused_debt_goes_to_the_back_of_the_line"
+  ]
+}

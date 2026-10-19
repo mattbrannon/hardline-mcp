@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    serve()  # not main(): through cli it would import this module a second time\n",
+  "after": "    pass\n",
+  "tests": [
+    "tests/test_server.py::test_the_module_entry_serves_once_whatever_its_arguments"
+  ]
+}

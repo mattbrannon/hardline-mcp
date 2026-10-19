@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if value != \"elevated\" or restored is None:",
+  "after": "    if value != \"elevated\":",
+  "tests": [
+    "tests/test_adapters.py::test_no_redirect_without_a_real_localappdata_to_give_back"
+  ]
+}

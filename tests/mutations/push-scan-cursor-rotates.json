@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "        rows, self._cursor = unread(owned, after=start)\n",
+  "after": "        rows, _ = unread(owned, after=0)\n",
+  "tests": [
+    "tests/test_channel.py::test_a_backlog_beyond_one_polls_scan_is_swept_across_polls"
+  ]
+}

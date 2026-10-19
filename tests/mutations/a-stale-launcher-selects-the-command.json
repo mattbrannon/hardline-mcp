@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    from .cli import main as select\n\n    select()\n",
+  "after": "    serve()\n",
+  "tests": [
+    "tests/test_cli.py::test_a_launcher_generated_for_server_main_still_selects_the_command"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    return _hinted(\"claude\", model, result)\n",
+  "after": "    return result\n",
+  "tests": [
+    "tests/test_model_routing.py::test_a_sync_call_carries_the_hint_whatever_the_outcome[asyncio-claude-astra-ask_codex-answered]",
+    "tests/test_model_routing.py::test_a_sync_call_carries_the_hint_whatever_the_outcome[asyncio-claude-astra-ask_codex-rejected]"
+  ]
+}

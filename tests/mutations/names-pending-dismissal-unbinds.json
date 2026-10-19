@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            unbound = bool(thread) and bindings.unbind(lane, thread)\n",
+  "after": "            unbound = False\n",
+  "tests": [
+    "tests/test_thread_names.py::test_cancelling_a_waiting_claim_withdraws_it_from_the_thread"
+  ]
+}

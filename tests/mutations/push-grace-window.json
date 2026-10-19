@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/delivery.py",
+  "before": "    return \"awaiting_receipt\" if now - oldest < GRACE else \"unreceipted\"\n",
+  "after": "    return \"awaiting_receipt\"\n",
+  "tests": [
+    "tests/test_channel.py::test_only_a_receipt_proves_a_push_arrived",
+    "tests/test_channel.py::test_a_missing_record_is_unknown_not_none"
+  ]
+}

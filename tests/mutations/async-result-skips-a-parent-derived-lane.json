@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    durable = adapters.reproducible_lane_suffix()\n",
+  "after": "    durable = adapters.derived_lane_suffix()\n",
+  "tests": [
+    "tests/test_server.py::test_a_codex_result_goes_to_its_claim"
+  ]
+}

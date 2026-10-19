@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        granted = \":\" in lane and bool(sessions.granted([lane]))\n",
+  "after": "        granted = \":\" in lane\n",
+  "tests": [
+    "tests/test_reply_address.py::test_a_lane_this_process_is_refused_is_not_given_as_the_reply_address"
+  ]
+}

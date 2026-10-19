@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/hints.py",
+  "before": "\"DELETE FROM lane_hints WHERE recipient = ? AND conversation = ?\"\n                \" AND (? IS NULL OR writer = ?)\",\n                (lane, conversation, writer, writer),",
+  "after": "\"DELETE FROM lane_hints WHERE recipient = ?\"\n                \" AND (? IS NULL OR writer = ?)\",\n                (lane, writer, writer),",
+  "tests": [
+    "tests/test_hints.py::test_only_the_conversation_that_held_a_name_forgets_it"
+  ]
+}

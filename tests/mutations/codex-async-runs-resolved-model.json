@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            model, resolution = adapters.resolve_codex_model(",
+  "after": "            _resolved, resolution = adapters.resolve_codex_model(",
+  "tests": [
+    "tests/test_server.py::test_ask_codex_async_resolves_a_family_at_admission"
+  ]
+}

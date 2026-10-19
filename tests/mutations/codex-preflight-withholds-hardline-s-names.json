@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    withheld = sorted(name for name in {*os.environ, *probe_env} if _CREDENTIAL_NAME.search(name))\n",
+  "after": "    withheld = sorted(name for name in probe_env if _CREDENTIAL_NAME.search(name))\n",
+  "tests": [
+    "tests/test_adapters.py::test_the_preflight_probes_the_workdir_and_every_existing_denial"
+  ]
+}

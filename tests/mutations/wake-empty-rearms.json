@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/wake_codex.py",
+  "before": "        if not pending:\n            self.uncertain_until = 0.0\n",
+  "after": "",
+  "tests": [
+    "tests/test_wake_codex.py::test_empty_snapshot_rearms_after_lost_reply"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    if envelope > total_budget:",
+  "after": "    if room < 0:",
+  "tests": [
+    "tests/test_github_context.py::test_a_listing_that_exactly_fits_is_delivered"
+  ]
+}

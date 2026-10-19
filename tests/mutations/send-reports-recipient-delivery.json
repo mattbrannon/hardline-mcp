@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        result[\"recipient_delivery\"] = _delivery_of(holders)\n",
+  "after": "        result[\"recipient_delivery\"] = \"unknown\"\n",
+  "tests": [
+    "tests/test_channel.py::test_a_sender_sees_whether_the_recipient_is_receiving_pushes"
+  ]
+}

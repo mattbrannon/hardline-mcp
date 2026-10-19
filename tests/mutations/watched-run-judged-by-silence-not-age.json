@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        silent = now - heard[0] >= idle_s\n",
+  "after": "        silent = now - started >= idle_s\n",
+  "tests": [
+    "tests/test_watched_runs.py::test_a_run_that_keeps_writing_outlives_the_idle_limit"
+  ]
+}

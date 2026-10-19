@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    return _CONTROL.sub(lambda m: f\"\\\\x{ord(m.group()):02x}\", str(text))",
+  "after": "    return str(text)",
+  "tests": [
+    "tests/test_github_context.py::test_a_filename_cannot_forge_lines_in_the_evidence"
+  ]
+}

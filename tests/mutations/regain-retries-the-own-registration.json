@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if _registration_failure:\n        _stage(_announce_self)\n",
+  "after": "",
+  "tests": [
+    "tests/test_channel.py::test_an_idle_session_refused_its_own_lane_takes_it_when_the_holder_exits"
+  ]
+}

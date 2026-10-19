@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "_forget(f\"{agent}:{label}\", own_grant=False)",
+  "after": "_forget(f\"{agent}:{label}\", own_grant=True)",
+  "tests": [
+    "tests/test_hints.py::test_a_hint_not_wanted_is_forgotten_by_release"
+  ]
+}

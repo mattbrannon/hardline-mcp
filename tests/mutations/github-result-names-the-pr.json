@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        \"pr\": f\"{data['repo']}#{data['number']}\",\n",
+  "after": "",
+  "tests": [
+    "tests/test_github_review.py::test_a_snapshot_id_gives_a_second_reviewer_the_same_evidence"
+  ]
+}

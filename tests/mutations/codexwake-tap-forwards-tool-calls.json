@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "                    client[\"on_call\"](getattr(root, \"params\", None))",
+  "after": "                    pass",
+  "tests": [
+    "tests/test_codex_queue.py::test_the_session_is_woken_with_only_the_constant_notice"
+  ]
+}

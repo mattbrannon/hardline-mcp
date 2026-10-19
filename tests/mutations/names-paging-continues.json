@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    record[\"cursor\"] = rows[-1][\"seq\"] if rows else record[\"cursor\"]\n",
+  "after": "    record[\"cursor\"] = None\n",
+  "tests": [
+    "tests/test_thread_names.py::test_more_than_a_page_of_names_comes_back_over_two_attempts"
+  ]
+}

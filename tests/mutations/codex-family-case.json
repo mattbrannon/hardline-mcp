@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "return _select_codex_family(name.lower(), models)",
+  "after": "return _select_codex_family(name, models)",
+  "tests": [
+    "tests/test_model_resolution.py::test_family_names_are_case_insensitive"
+  ]
+}

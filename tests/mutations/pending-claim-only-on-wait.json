@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        if not (wait and waitable):\n",
+  "after": "        if not waitable:\n",
+  "tests": [
+    "tests/test_continuity.py::test_without_wait_a_held_name_is_refused_and_not_awaited"
+  ]
+}

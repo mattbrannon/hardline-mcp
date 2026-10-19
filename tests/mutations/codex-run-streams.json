@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "            streaming=True,  # --json, above\n",
+  "after": "",
+  "tests": [
+    "tests/test_adapters.py::test_structured_runs_are_watched_and_the_plain_one_is_not"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "NOT_SHOWN = (\"truncated\", \"omitted_by_github\", \"excluded_by_caller\", \"over_budget\")",
+  "after": "NOT_SHOWN = (\"truncated\", \"excluded_by_caller\", \"over_budget\")",
+  "tests": [
+    "tests/test_github_context.py::test_a_patch_github_omitted_makes_coverage_partial",
+    "tests/test_github_review.py::test_a_patch_github_omitted_is_partial_and_the_reviewer_is_told"
+  ]
+}

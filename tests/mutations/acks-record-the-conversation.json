@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            conversation=adapters.conversation_id(),\n",
+  "after": "            conversation=None,\n",
+  "tests": [
+    "tests/test_server.py::test_reads_and_acks_record_this_process_and_conversation"
+  ]
+}

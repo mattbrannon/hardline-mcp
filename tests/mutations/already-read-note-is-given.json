@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        response[\"receipt_note\"] = ALREADY_READ_NOTE\n",
+  "after": "        pass\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_notice_for_mail_already_read_says_so"
+  ]
+}

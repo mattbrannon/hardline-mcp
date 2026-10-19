@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    skip_git_check = not write\n",
+  "after": "    skip_git_check = True\n",
+  "tests": [
+    "tests/test_adapters.py::test_a_write_run_keeps_codex_git_check_and_says_why_it_refused"
+  ]
+}

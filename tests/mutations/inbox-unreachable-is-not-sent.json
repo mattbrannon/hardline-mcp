@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "        outcome.append(announce.NotSent(f\"{type(exc).__name__}: {exc}\"))",
+  "after": "        outcome.append(exc)",
+  "tests": [
+    "tests/test_claude_inbox.py::test_an_inbox_never_reached_delivered_nothing[error0]"
+  ]
+}

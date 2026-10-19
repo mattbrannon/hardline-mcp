@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "        if self.unsteered == UNDECIDED:\n            self.decide()\n",
+  "after": "        if self.unsteered == UNDECIDED:\n            pass\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_steering_is_decided_without_missing_the_first_call"
+  ]
+}

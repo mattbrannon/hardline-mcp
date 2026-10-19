@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "                self._last_fulfil = None\n",
+  "after": "",
+  "tests": [
+    "tests/test_thread_names.py::test_the_first_poll_after_the_pin_restores"
+  ]
+}

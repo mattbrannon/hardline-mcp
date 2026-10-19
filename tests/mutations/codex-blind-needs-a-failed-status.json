@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if c.get(\"status\") == \"failed\"\n        and _CODEX_NOT_STARTED",
+  "after": "        if _CODEX_NOT_STARTED",
+  "tests": [
+    "tests/test_adapters.py::test_a_command_quoting_the_message_after_it_ran_is_ordinary"
+  ]
+}

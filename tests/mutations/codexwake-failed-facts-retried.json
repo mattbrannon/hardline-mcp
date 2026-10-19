@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                    setattr(self, flag, True)  # retried on the next poll\n",
+  "after": "                    pass\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_failed_fact_write_is_retried"
+  ]
+}

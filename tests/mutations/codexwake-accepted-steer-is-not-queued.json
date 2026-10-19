@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "                self._note(f\"codex notice steered into turn {turn} ({outcome.server})\")\n                self._route(\"steer\")\n                return\n",
+  "after": "                self._note(f\"codex notice steered into turn {turn} ({outcome.server})\")\n                self._route(\"steer\")\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_a_busy_session_is_steered_into_its_turn_not_queued",
+    "tests/test_codex_queue.py::test_a_refusal_is_steered_again_once_for_a_turn_that_moved"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "            elif mine and lane in listed:\n",
+  "after": "            elif mine and lane in held:\n",
+  "tests": [
+    "tests/test_thread_names.py::test_this_processs_unlisted_derived_binding_is_adopted"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "    except Exception as exc:  # noqa: BLE001 - not connected: nothing delivered",
+  "after": "    except OSError as exc:  # noqa: BLE001 - not connected: nothing delivered",
+  "tests": [
+    "tests/test_claude_inbox.py::test_an_inbox_never_reached_delivered_nothing[error1]"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "                    if lane in rank:\n",
+  "after": "                    if False:\n",
+  "tests": [
+    "tests/test_sessions.py::test_a_refused_lane_keeps_its_place_without_being_granted"
+  ]
+}

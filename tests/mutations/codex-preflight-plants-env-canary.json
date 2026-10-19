@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    probe_env = _agent_env({**env, _CODEX_ENV_CANARY: \"1\"})\n",
+  "after": "    probe_env = _agent_env(env)\n",
+  "tests": [
+    "tests/test_adapters.py::test_the_preflight_probes_the_workdir_and_every_existing_denial"
+  ]
+}

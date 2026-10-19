@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        if inbox is None:\n            await pusher.run(send, initialized, client)\n",
+  "after": "        if True:\n            await pusher.run(send, initialized, client)\n",
+  "tests": [
+    "tests/test_claude_inbox.py::test_the_session_is_woken_through_its_inbox_with_only_the_notice"
+  ]
+}

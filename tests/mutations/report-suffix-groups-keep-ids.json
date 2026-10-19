@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "            if len(group[\"message_ids\"]) < SAMPLE:\n                group[\"message_ids\"].append(notice[\"id\"])\n",
+  "after": "",
+  "tests": [
+    "tests/test_report.py::test_other_instance_notices_are_grouped_by_lane_suffix_against_the_acker"
+  ]
+}

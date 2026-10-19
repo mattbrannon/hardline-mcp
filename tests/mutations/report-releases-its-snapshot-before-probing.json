@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "    with closing(sqlite3.connect(db.as_uri() + \"?mode=ro\", uri=True, timeout=5)) as conn:\n",
+  "after": "    conn = sqlite3.connect(db.as_uri() + \"?mode=ro\", uri=True, timeout=5)\n    globals().setdefault(\"_held\", []).append(conn)\n    if True:\n",
+  "tests": [
+    "tests/test_report.py::test_probes_run_once_per_identity_after_the_snapshot_closes"
+  ]
+}

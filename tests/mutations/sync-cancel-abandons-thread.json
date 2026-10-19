@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "functools.partial(fn, prompt, **kwargs), abandon_on_cancel=True",
+  "after": "functools.partial(fn, prompt, **kwargs)",
+  "tests": [
+    "tests/test_sync_agent.py::test_a_cancelled_call_kills_the_child_it_spawned"
+  ]
+}

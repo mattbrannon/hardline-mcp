@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            paid = _debts.get(key) is write\n",
+  "after": "            paid = key in _debts\n",
+  "tests": [
+    "tests/test_server.py::test_a_debt_replaced_while_it_was_retried_is_kept"
+  ]
+}

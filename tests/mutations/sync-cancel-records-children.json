@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    kwargs[\"on_spawn\"] = on_spawn\n",
+  "after": "",
+  "tests": [
+    "tests/test_sync_agent.py::test_a_cancelled_call_kills_the_child_it_spawned"
+  ]
+}

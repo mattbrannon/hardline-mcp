@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if \":\" in from_agent or not agent or from_agent != adapters.base_agent(agent):\n",
+  "after": "    if not agent or adapters.base_agent(from_agent) != adapters.base_agent(agent):\n",
+  "tests": [
+    "tests/test_reply_address.py::test_any_other_sender_is_kept_as_given"
+  ]
+}

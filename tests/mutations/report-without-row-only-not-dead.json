@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "if s[\"lane\"].startswith(\"codex:\") and identity not in recorded and _is_live(s, probe):",
+  "after": "if s[\"lane\"].startswith(\"codex:\") and identity not in recorded:",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_report_lists_codex_lane_servers_that_wrote_no_row"
+  ]
+}

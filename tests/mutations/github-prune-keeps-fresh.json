@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "        return now - path.stat().st_mtime >= SNAPSHOT_TTL_S",
+  "after": "        return True",
+  "tests": [
+    "tests/test_github_context.py::test_pruning_removes_only_long_unused_snapshots"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    granted = _stage(_fulfil_pending, fallback=[])\n",
+  "after": "    granted = _fulfil_pending()\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_failing_stage_does_not_starve_restoration"
+  ]
+}

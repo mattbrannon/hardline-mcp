@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "        state = probe(c[\"pid\"], c[\"process_key\"])\n        if state != DEAD:\n",
+  "after": "        state = probe(c[\"pid\"], c[\"process_key\"])\n        if False:\n",
+  "tests": [
+    "tests/test_thread_names.py::test_the_write_phase_rechecks_the_writer_itself"
+  ]
+}

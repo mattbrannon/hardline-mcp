@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            with contextlib.suppress(Exception):  # a lost stream must not fail the call\n                await ctx.report_progress",
+  "after": "            if True:\n                await ctx.report_progress",
+  "tests": [
+    "tests/test_sync_agent.py::test_a_waiting_call_reports_progress"
+  ]
+}

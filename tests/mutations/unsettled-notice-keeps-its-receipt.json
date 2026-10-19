@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                return address, self.outstanding[0], None\n",
+  "after": "                return address, secrets.token_hex(8), None\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_an_unsettled_notice_is_due_again_with_its_own_receipt",
+    "tests/test_unsettled_notices.py::test_a_failed_codex_queue_is_queued_again_until_receipted"
+  ]
+}

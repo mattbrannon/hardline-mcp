@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    elif accepted and not msgs and not remaining and \":\" not in agent:\n",
+  "after": "    elif accepted and not msgs and \":\" not in agent:\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_mail_left_unacked_is_not_already_read"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if run_cwd is None:\n            try:\n                neutral_root",
+  "after": "        if False:\n            try:\n                neutral_root",
+  "tests": [
+    "tests/test_github_review.py::test_a_codex_reviewer_without_workdir_runs_in_an_empty_directory"
+  ]
+}

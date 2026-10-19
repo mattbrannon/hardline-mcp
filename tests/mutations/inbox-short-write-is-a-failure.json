@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "        if written is not None and written != len(payload):\n",
+  "after": "        if False:\n",
+  "tests": [
+    "tests/test_claude_inbox.py::test_a_short_write_is_a_failed_write"
+  ]
+}

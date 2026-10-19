@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "            \"revision\": recorded.get((pid, key)),\n",
+  "after": "            \"revision\": next((r for (p, _), r in recorded.items() if p == pid), None),\n",
+  "tests": [
+    "tests/test_report.py::test_revisions_are_counted_per_running_process"
+  ]
+}

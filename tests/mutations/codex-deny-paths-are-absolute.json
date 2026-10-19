@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "for spelling in (Path(os.path.abspath(path)), path.resolve())",
+  "after": "for spelling in (path, path.resolve())",
+  "tests": [
+    "tests/test_adapters.py::test_a_relocated_store_is_denied_where_it_resolves"
+  ]
+}

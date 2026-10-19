@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/procid.py",
+  "before": "                or _created_after(captured.key, descendant_key)\n",
+  "after": "                or False\n",
+  "tests": [
+    "tests/test_identity.py::test_ancestry_rejects_a_parent_born_after_its_child"
+  ]
+}

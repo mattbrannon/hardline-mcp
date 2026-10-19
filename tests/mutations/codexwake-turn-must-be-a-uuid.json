@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "self.turn = _uuid(turn.get(\"turn_id\")) or self.turn",
+  "after": "self.turn = turn.get(\"turn_id\") or self.turn",
+  "tests": [
+    "tests/test_codex_queue.py::test_only_the_pinned_threads_calls_leave_a_turn"
+  ]
+}

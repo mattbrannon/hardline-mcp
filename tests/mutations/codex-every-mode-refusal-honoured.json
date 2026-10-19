@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        isolation, refusal = _codex_isolation(exe, child_env, run_cwd, on_spawn)\n        if refusal is not None:\n            return refusal\n",
+  "after": "        isolation, refusal = _codex_isolation(exe, child_env, run_cwd, on_spawn)\n        isolation = isolation or []\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_a_failed_listing_refuses_the_call"
+  ]
+}

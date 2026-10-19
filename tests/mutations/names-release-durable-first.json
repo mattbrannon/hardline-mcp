@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        if lane:\n            sessions.drop_lane(lane, thread=_pinned_thread())\n        adapters.release_lane(label)\n",
+  "after": "        adapters.release_lane(label)\n        if lane:\n            sessions.drop_lane(lane, thread=_pinned_thread())\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_release_that_fails_durably_keeps_the_name"
+  ]
+}

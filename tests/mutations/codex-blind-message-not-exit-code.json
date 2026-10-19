@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        and _CODEX_NOT_STARTED in str(c.get(\"aggregated_output\") or \"\")\n",
+  "after": "        and c.get(\"exit_code\") == -1\n",
+  "tests": [
+    "tests/test_adapters.py::test_an_exit_code_alone_does_not_mean_not_started"
+  ]
+}

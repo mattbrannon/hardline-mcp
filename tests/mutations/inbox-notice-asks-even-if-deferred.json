@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "f\"inbox(agent='claude', auto_ack=false, receipt='{nonce}') even if you \"\n        \"already read it or defer the work: the receipt re-enables these notices. \"\n",
+  "after": "f\"inbox(agent='claude', auto_ack=false, receipt='{nonce}'). \"\n",
+  "tests": [
+    "tests/test_claude_inbox.py::test_the_notice_is_exactly_this_text"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "claude_name = name in CLAUDE_MODEL_ALIASES or name.startswith(\"claude-\")",
+  "after": "claude_name = name in CLAUDE_MODEL_ALIASES",
+  "tests": [
+    "tests/test_model_routing.py::test_a_claude_name_sent_to_codex_points_at_ask_claude[claude-fable-5-1]"
+  ]
+}

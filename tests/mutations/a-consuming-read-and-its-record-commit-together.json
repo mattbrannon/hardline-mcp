@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/mailbox.py",
+  "before": "                        _record_acks(conn, ackable, conversation)\n",
+  "after": "                        conn.commit()\n                        _record_acks(conn, ackable, conversation)\n",
+  "tests": [
+    "tests/test_mailbox.py::test_an_ack_and_its_record_commit_together[inbox]"
+  ]
+}

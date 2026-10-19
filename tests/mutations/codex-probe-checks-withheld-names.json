@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "inherited = [name for name in withheld if name in os.environ]\n",
+  "after": "inherited = []\n",
+  "tests": [
+    "tests/test_adapters.py::test_the_policy_probe[credential-inherited]"
+  ]
+}

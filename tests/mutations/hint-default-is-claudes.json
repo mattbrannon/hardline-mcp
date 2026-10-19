@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "and not claude_name and name != \"default\" and (",
+  "after": "and not claude_name and (",
+  "tests": [
+    "tests/test_model_routing.py::test_no_hint_where_the_name_gives_no_evidence[claude-default]"
+  ]
+}

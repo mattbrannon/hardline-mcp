@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/dispatch.py",
+  "before": "removed = self._pending.pop(future, None)",
+  "after": "removed = self._pending.get(future)",
+  "tests": [
+    "tests/test_dispatch.py::test_cancel_removes_prompt_and_notifies_waiters_before_worker_is_free"
+  ]
+}

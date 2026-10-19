@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/jobs.py",
+  "before": "                    QUEUED,\n                    owner_pid,\n                    owner_key,",
+  "after": "                    QUEUED,\n                    owner_pid,\n                    process_key(owner_pid),",
+  "tests": [
+    "tests/test_identity.py::test_verified_owner_token_survives_later_probe_failure"
+  ]
+}

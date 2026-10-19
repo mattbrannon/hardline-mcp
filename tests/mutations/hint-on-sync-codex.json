@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    return _hinted(\"codex\", model, result)\n",
+  "after": "    return result\n",
+  "tests": [
+    "tests/test_model_routing.py::test_a_sync_call_carries_the_hint_whatever_the_outcome[asyncio-codex-fable-ask_claude-answered]",
+    "tests/test_model_routing.py::test_a_sync_call_carries_the_hint_whatever_the_outcome[asyncio-codex-fable-ask_claude-rejected]"
+  ]
+}

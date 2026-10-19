@@ -1,0 +1,10 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    if moved:\n        changes",
+  "after": "    if False:\n        changes",
+  "tests": [
+    "tests/test_github_context.py::test_a_head_that_moves_during_collection_fails_it",
+    "tests/test_github_context.py::test_a_base_that_moves_during_collection_fails_it",
+    "tests/test_github_review.py::test_a_head_that_moves_starts_no_reviewer"
+  ]
+}

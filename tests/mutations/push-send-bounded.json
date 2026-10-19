@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "                        with anyio.fail_after(SEND_TIMEOUT_S):\n",
+  "after": "                        with contextlib.nullcontext():\n",
+  "tests": [
+    "tests/test_channel.py::test_a_failed_write_is_taken_back_and_retried"
+  ]
+}

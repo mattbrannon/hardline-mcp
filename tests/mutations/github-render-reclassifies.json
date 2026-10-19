@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "        name, reason = _one_line(entry[\"filename\"]), _no_patch_reason(entry)",
+  "after": "        name, reason = _one_line(entry[\"filename\"]), entry.get(\"no_patch\")",
+  "tests": [
+    "tests/test_github_context.py::test_a_stored_snapshot_is_classified_again_not_trusted"
+  ]
+}

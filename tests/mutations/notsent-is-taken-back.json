@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                        else:\n                            await anyio.to_thread.run_sync(self.take_back, nonce, ids)\n",
+  "after": "                        else:\n                            pass\n",
+  "tests": [
+    "tests/test_claude_inbox.py::test_an_inbox_that_cannot_be_reached_is_tried_again"
+  ]
+}

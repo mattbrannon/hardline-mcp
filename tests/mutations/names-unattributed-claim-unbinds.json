@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "                if binding == \"unbind\" or key is None:\n                    bindings.unbind_lane(conn, primary)\n",
+  "after": "                if binding == \"unbind\" or key is None:\n                    pass\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_claim_not_from_the_pinned_thread_unbinds_the_name"
+  ]
+}

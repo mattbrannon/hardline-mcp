@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "    return UNKNOWN if row[\"host_key\"] is None and state == ALIVE else state\n",
+  "after": "    return state\n",
+  "tests": [
+    "tests/test_identity.py::test_unverified_host_remains_unknown_until_confirmed_dead"
+  ]
+}

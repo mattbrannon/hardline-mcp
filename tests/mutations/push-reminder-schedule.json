@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "            if r[\"id\"] not in self.schedule or self.schedule[r[\"id\"]][\"next\"] <= now\n",
+  "after": "            if r[\"id\"] not in self.schedule or True\n",
+  "tests": [
+    "tests/test_channel.py::test_lane_mail_is_pushed_once_with_a_receipt_and_bare_mail_never",
+    "tests/test_channel.py::test_unread_pushed_mail_is_reminded_on_its_own_schedule"
+  ]
+}

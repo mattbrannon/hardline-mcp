@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if not isinstance(servers, list) or not all(\n",
+  "after": "    if not isinstance(servers, (list, dict, str)) or not all(\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_an_unprovable_listing_refuses_the_call[object]",
+    "tests/test_codex_isolation.py::test_an_unprovable_listing_refuses_the_call[string]"
+  ]
+}

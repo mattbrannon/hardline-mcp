@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "            self.receipts = {n: t for n, t in self.receipts.items() if t > pushed}\n",
+  "after": "            self.receipts = {n: t for n, t in self.receipts.items() if t >= pushed}\n",
+  "tests": [
+    "tests/test_channel.py::test_only_a_receipt_proves_a_push_arrived"
+  ]
+}

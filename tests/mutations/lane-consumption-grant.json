@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "    return tuple(owned)\n",
+  "after": "    return tuple(lanes)\n",
+  "tests": [
+    "tests/test_ownership.py::test_refused_registration_cannot_consume",
+    "tests/test_ownership.py::test_missing_grant_cannot_be_consumed_from_local_identity"
+  ]
+}

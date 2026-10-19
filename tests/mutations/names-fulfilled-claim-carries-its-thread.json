@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            result = _register_locked(label, record.agent, wait=False, thread=record.thread)\n",
+  "after": "            result = _register_locked(label, record.agent, wait=False, thread=None)\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_fulfilled_claim_is_bound_as_its_request_was"
+  ]
+}

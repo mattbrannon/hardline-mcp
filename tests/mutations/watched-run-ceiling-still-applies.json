@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if silent or now - started >= timeout_s:\n",
+  "after": "        if silent:\n",
+  "tests": [
+    "tests/test_watched_runs.py::test_the_ceiling_still_ends_a_run_that_never_stops_writing"
+  ]
+}

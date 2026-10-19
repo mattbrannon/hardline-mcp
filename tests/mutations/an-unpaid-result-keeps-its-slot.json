@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            if key in _debts:\n                _debt_slots[key] = slots\n                return\n",
+  "after": "            pass\n",
+  "tests": [
+    "tests/test_server.py::test_an_unpaid_result_keeps_its_admission_slot"
+  ]
+}

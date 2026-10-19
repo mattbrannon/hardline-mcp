@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        denied += [str(path) for path in _codex_unreadable(env) if path.exists()]\n",
+  "after": "        denied += []\n",
+  "tests": [
+    "tests/test_adapters.py::test_the_preflight_probes_the_workdir_and_every_existing_denial"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if derived := adapters.derived_lane_suffix():\n        _advise(lambda: hints.record(f\"{agent}:{derived}\", None))\n",
+  "after": "",
+  "tests": [
+    "tests/test_hints.py::test_an_automatic_grant_clears_the_hint_for_its_name"
+  ]
+}

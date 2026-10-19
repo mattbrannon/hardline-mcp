@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "    refusal = _refusal(conn, c[\"lane\"], pid, probe)  # adopt too: held is not granted\n",
+  "after": "    refusal = None\n",
+  "tests": [
+    "tests/test_thread_names.py::test_the_write_phase_rechecks_the_ownership_rule"
+  ]
+}

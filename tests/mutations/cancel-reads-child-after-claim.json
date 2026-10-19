@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/jobs.py",
+  "before": "        job = {**job, **dict(current)}\n",
+  "after": "",
+  "tests": [
+    "tests/test_jobs.py::test_cancel_kills_the_child_recorded_while_it_was_claiming"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "                if reason is None:\n                    if not accepted and key is not None:\n",
+  "after": "                if reason is None and c[\"kind\"] == \"acquire\":\n                    if not accepted and key is not None:\n",
+  "tests": [
+    "tests/test_thread_names.py::test_adopting_a_held_name_takes_its_registry_grant_too"
+  ]
+}

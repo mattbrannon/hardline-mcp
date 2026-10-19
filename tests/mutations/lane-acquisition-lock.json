@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "        with conn:\n            conn.execute(\"BEGIN IMMEDIATE\")\n            for lane in requested:\n",
+  "after": "        with conn:\n            for lane in requested:\n",
+  "tests": [
+    "tests/test_ownership.py::test_acquisition_serializes_check_and_write"
+  ]
+}

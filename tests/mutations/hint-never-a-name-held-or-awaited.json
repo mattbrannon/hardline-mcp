@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "if lane.startswith(f\"{agent}:\") and lane not in current",
+  "after": "if lane.startswith(f\"{agent}:\")",
+  "tests": [
+    "tests/test_hints.py::test_a_name_held_or_awaited_again_is_no_longer_hinted"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "                **({\"model_hint\": hint} if hint else {}),\n",
+  "after": "                **({\"model_hint\": h} if (h := adapters.model_hint(agent, model)) else {}),\n",
+  "tests": [
+    "tests/test_model_routing.py::test_the_hint_reads_the_callers_spelling_not_the_expansion"
+  ]
+}

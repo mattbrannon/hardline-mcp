@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    _settle_debts()\n    return jobs.get(job_id)\n",
+  "after": "    return jobs.get(job_id)\n",
+  "tests": [
+    "tests/test_server.py::test_a_refused_finish_is_paid_on_the_next_look_at_the_job"
+  ]
+}

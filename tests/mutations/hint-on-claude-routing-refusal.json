@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        return _hinted(\n            \"claude\", model, {\"ok\": False, \"error\": plan[\"error\"], \"routing\": plan[\"routing\"]}\n        )\n",
+  "after": "        return {\"ok\": False, \"error\": plan[\"error\"], \"routing\": plan[\"routing\"]}\n",
+  "tests": [
+    "tests/test_model_routing.py::test_a_refusal_carries_the_hint[asyncio-codex-fable-ask_claude]"
+  ]
+}

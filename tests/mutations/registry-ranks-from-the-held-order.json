@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "    rank = {lane: i for i, lane in enumerate(requested, 1)} if ranked else {}",
+  "after": "    rank = {}",
+  "tests": [
+    "tests/test_sessions.py::test_a_derived_lane_granted_after_a_claim_is_not_advertised_over_it",
+    "tests/test_sessions.py::test_a_refused_lane_keeps_its_place_without_being_granted"
+  ]
+}

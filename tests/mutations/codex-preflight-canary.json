@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        denied = [str(_codex_canary())]\n",
+  "after": "        denied = []\n",
+  "tests": [
+    "tests/test_adapters.py::test_the_preflight_probes_the_workdir_and_every_existing_denial"
+  ]
+}

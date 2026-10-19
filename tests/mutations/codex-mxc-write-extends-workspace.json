@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "f'permissions.{name}.extends=\"{\":workspace\" if write else \":read-only\"}\"'",
+  "after": "f'permissions.{name}.extends=\":read-only\"'",
+  "tests": [
+    "tests/test_adapters.py::test_mxc_write_pins_the_workspace_profile"
+  ]
+}

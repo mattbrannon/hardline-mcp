@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        codex = adapters.codex_models(mode, workdir)\n",
+  "after": "        codex = adapters.codex_models(mode, None)\n",
+  "tests": [
+    "tests/test_model_routing.py::test_list_models_reads_the_catalog_its_options_name"
+  ]
+}

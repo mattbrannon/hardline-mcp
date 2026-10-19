@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        adapters.cancel_pending(label)\n        with _identity_lock:\n",
+  "after": "        with _identity_lock:\n",
+  "tests": [
+    "tests/test_continuity.py::test_release_cancels_a_waiting_claim"
+  ]
+}

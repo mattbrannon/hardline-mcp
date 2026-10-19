@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "            self._retry_at, self._failures = None, 0  # settled, by any copy that landed\n",
+  "after": "            self._failures = 0\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_a_receipt_clears_a_pending_resend"
+  ]
+}

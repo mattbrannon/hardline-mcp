@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "            if newest > self.pointed.get(lane, 0)\n",
+  "after": "            if newest >= self.pointed.get(lane, 0)\n",
+  "tests": [
+    "tests/test_hints.py::test_mail_at_a_name_held_before_wakes_the_session_per_newer_mail"
+  ]
+}

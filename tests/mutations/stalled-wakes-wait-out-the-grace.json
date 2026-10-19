@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "        if owed is None or now - owed < GRACE or not waiting:\n",
+  "after": "        if owed is None or not waiting:\n",
+  "tests": [
+    "tests/test_unsettled_notices.py::test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait"
+  ]
+}

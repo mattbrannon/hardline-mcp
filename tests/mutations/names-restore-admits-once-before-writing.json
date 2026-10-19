@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "            if attribution(thread) != thread:\n",
+  "after": "            if False:\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_stop_between_survey_and_write_commits_nothing"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    for path in random.sample(stale, min(len(stale), _PRUNE_PER_CALL)):",
+  "after": "    for path in stale:",
+  "tests": [
+    "tests/test_github_context.py::test_pruning_attempts_a_bounded_number_of_deletions"
+  ]
+}

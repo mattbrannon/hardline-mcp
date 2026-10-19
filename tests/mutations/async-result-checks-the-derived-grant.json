@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if lane and sessions.granted([lane]):\n",
+  "after": "    if lane:\n",
+  "tests": [
+    "tests/test_server.py::test_a_result_skips_a_derived_lane_another_process_took"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    \"receipt=<its receipt>) even if you defer the work, tell the user who sent \"\n    \"each message and what it says, act, then ack the ids. \"",
+  "after": "    \"receipt=<its receipt>) even if you defer the work, act, then ack the ids. \"",
+  "tests": [
+    "tests/test_channel.py::test_initialize_declares_the_channel_and_the_standing_rule"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    if entry.get(\"changes\") == 0:",
+  "after": "    if not entry.get(\"changes\"):",
+  "tests": [
+    "tests/test_github_context.py::test_a_missing_patch_with_changes_unproven_is_withheld[null-changes]",
+    "tests/test_github_context.py::test_a_missing_patch_with_changes_unproven_is_withheld[no-changes]"
+  ]
+}

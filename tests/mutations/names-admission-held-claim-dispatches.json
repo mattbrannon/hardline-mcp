@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    if adapters.claimed_lanes() or adapters.reproducible_lane_suffix():\n        return None, None\n",
+  "after": "    if False:\n        return None, None\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_held_claim_dispatches_despite_an_unheld_name"
+  ]
+}

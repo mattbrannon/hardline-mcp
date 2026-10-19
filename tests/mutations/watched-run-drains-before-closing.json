@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "            complete = settle(_DRAIN_S)\n",
+  "after": "            for stream in streams.values():\n                with contextlib.suppress(Exception):\n                    stream.close()\n            complete = settle(_DRAIN_S)\n",
+  "tests": [
+    "tests/test_watched_runs.py::test_a_pipe_is_drained_before_it_is_closed"
+  ]
+}

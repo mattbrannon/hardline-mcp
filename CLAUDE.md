@@ -15,7 +15,7 @@ python -m pip install -e ".[dev,codex-watch]"   # codex-watch un-skips the Codex
 python -m pytest tests/test_sessions.py -q      # one module
 python -m pytest "tests/test_identity.py::test_verified_owner_token_survives_later_probe_failure" -q
 python -m pytest -q -rs -n auto                 # full suite, as CI runs it
-python scripts/mutate.py [case ...] [--jobs N]  # regression mutations (tests/mutations.json)
+python scripts/mutate.py [case ...] [--jobs N]  # regression mutations (tests/mutations/*.json)
 hardline-mcp report [--db PATH]                 # read-only audit of a store (report.py)
 ```
 
@@ -202,14 +202,16 @@ a test that still exists, with the ordinary suite: rewording a string another
 case anchors on fails locally in milliseconds, not in CI minutes later.
 
 Run `python scripts/mutate.py` for all committed cases, or pass case names
-from `tests/mutations.json`. Each case runs a passing baseline, applies one
+from `tests/mutations/`. Each case runs a passing baseline, applies one
 exact replacement in a temporary source copy, and requires a regression
 assertion failure. Skips, empty selections, and execution errors do not count.
 
-To register a fix, add a case to `tests/mutations.json` keyed by name:
+To register a fix, add a file `tests/mutations/<name>.json`, whose name is the
+case's key (lowercase letters, digits and hyphens), holding
 `{"file": ..., "before": <fixed text>, "after": <original defect>, "tests":
-[<node ids that must fail>]}`. `before` must appear exactly once in `file`,
-and a mutation only counts as caught when an assertion fails (`assert`,
+[<node ids that must fail>]}`. One file per case, so concurrent PRs never edit
+the same line. `before` must appear exactly once in `file`, and a mutation
+only counts as caught when an assertion fails (`assert`,
 `AssertionError`, `DID NOT RAISE`). A mutation that makes the test crash, say
 with a `NameError`, is reported as not caught.
 

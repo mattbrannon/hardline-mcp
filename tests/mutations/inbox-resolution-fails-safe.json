@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "    except Exception:  # noqa: BLE001 - a wake must never stop the server starting\n",
+  "after": "    except OSError:  # noqa: BLE001 - a wake must never stop the server starting\n",
+  "tests": [
+    "tests/test_claude_inbox.py::test_anything_unexpected_while_resolving_is_no_inbox"
+  ]
+}

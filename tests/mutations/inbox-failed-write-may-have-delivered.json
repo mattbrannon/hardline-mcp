@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "    except Exception as exc:  # noqa: BLE001 - written: it may have been delivered\n        outcome.append(exc)",
+  "after": "    except Exception as exc:  # noqa: BLE001 - written: it may have been delivered\n        outcome.append(announce.NotSent(str(exc)))",
+  "tests": [
+    "tests/test_claude_inbox.py::test_a_failed_write_may_have_delivered"
+  ]
+}

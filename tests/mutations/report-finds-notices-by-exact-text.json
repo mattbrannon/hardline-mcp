@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "    \" WHERE acked_at IS NOT NULL AND instr(body, '\\\"job_finished\\\"') > 0 ORDER BY id DESC\",\n",
+  "after": "    \" WHERE acked_at IS NOT NULL AND body LIKE '{\\\"type\\\": \\\"job_finished\\\"%' ORDER BY id DESC\",\n",
+  "tests": [
+    "tests/test_report.py::test_any_body_is_free_text"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/bindings.py",
+  "before": "        [(base + i, lane, thread, pid, key) for i, lane in enumerate(dict.fromkeys(order), 1)],\n",
+  "after": "        [(i, lane, thread, pid, key) for i, lane in enumerate(dict.fromkeys(order), 1)],\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_claim_is_placed_above_another_writers_names_on_the_thread"
+  ]
+}

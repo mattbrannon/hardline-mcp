@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "            self.facts[\"last_push_at\"] = self._previous_push\n",
+  "after": "",
+  "tests": [
+    "tests/test_claude_inbox.py::test_a_notice_taken_back_is_no_push_and_its_mail_is_due_again"
+  ]
+}

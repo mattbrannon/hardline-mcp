@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            adapters.declare_agent(agent)  # names under codex: are held here\n",
+  "after": "            pass\n",
+  "tests": [
+    "tests/test_thread_names.py::test_restoration_declares_codex_when_nothing_else_did"
+  ]
+}

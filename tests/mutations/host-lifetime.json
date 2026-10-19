@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "state = (probe or instance_state)(row[\"host_pid\"], row[\"host_key\"])",
+  "after": "state = ALIVE",
+  "tests": [
+    "tests/test_identity.py::test_orphan_server_lifetime_follows_host"
+  ]
+}

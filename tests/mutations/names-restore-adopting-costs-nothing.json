@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "                if c[\"new\"] and free <= 0:\n",
+  "after": "                if free <= 0:\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_full_session_still_adopts_a_name_it_already_holds"
+  ]
+}

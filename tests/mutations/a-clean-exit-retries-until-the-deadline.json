@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        while not _pay_owed(deadline) and time.monotonic() < deadline:\n            time.sleep(_EXIT_RETRY_S)\n",
+  "after": "        _pay_owed(deadline)\n",
+  "tests": [
+    "tests/test_server.py::test_a_store_still_down_is_retried_until_the_deadline"
+  ]
+}

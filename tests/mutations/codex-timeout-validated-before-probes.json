@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    try:\n        _timeout_for(\"codex\")\n        sandbox = _codex_sandbox()\n    except ValueError as exc:\n        return {\"ok\": False, \"error\": str(exc)}\n",
+  "after": "    sandbox = _codex_sandbox()\n",
+  "tests": [
+    "tests/test_codex_isolation.py::test_an_invalid_timeout_fails_before_any_probe[plain]",
+    "tests/test_codex_isolation.py::test_an_invalid_timeout_fails_before_any_probe[telemetry]"
+  ]
+}

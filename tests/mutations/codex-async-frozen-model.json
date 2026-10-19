@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            extra_ask_kwargs = {**(extra_ask_kwargs or {}), \"resolve_model\": False}",
+  "after": "            pass",
+  "tests": [
+    "tests/test_server.py::test_ask_codex_async_worker_cannot_re_decide_the_model"
+  ]
+}

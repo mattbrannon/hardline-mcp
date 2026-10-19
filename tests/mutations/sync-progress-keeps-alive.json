@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "                tg.start_soon(keep_alive)\n",
+  "after": "                pass\n",
+  "tests": [
+    "tests/test_sync_agent.py::test_a_waiting_call_reports_progress"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/mailbox.py",
+  "before": "                        _record_acks(conn, ackable, conversation)\n",
+  "after": "",
+  "tests": [
+    "tests/test_mailbox.py::test_a_consuming_read_records_who_acked_exactly_what_it_consumed",
+    "tests/test_server.py::test_reads_and_acks_record_this_process_and_conversation"
+  ]
+}

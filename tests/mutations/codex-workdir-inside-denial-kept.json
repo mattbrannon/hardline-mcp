@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if cwd is not None and any(path in Path(cwd).parents for path in access):\n        access[Path(cwd)] = \"write\" if write else \"read\"\n",
+  "after": "",
+  "tests": [
+    "tests/test_adapters.py::test_a_workdir_inside_a_denied_directory_stays_usable[False-read]",
+    "tests/test_adapters.py::test_a_workdir_inside_a_denied_directory_stays_usable[True-write]"
+  ]
+}

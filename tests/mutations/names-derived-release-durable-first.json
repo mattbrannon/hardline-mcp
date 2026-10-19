@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "            if lane:\n                sessions.release_derived(\n",
+  "after": "            adapters.release_lane(label)\n            if lane:\n                sessions.release_derived(\n",
+  "tests": [
+    "tests/test_thread_names.py::test_a_failed_derived_release_keeps_the_claim"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "                why = f\"steer unreached: {exc}\"\n                break\n",
+  "after": "                why = f\"steer unreached: {exc}\"\n                raise\n",
+  "tests": [
+    "tests/test_codex_queue.py::test_an_unreached_steer_queues"
+  ]
+}

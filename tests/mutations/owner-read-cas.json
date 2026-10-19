@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/jobs.py",
+  "before": "state IN (?, ?) AND owner_pid = ? AND owner_key IS ?",
+  "after": "state IN (?, ?) AND owner_pid = ? AND (owner_key IS ? OR 1)",
+  "tests": [
+    "tests/test_identity.py::test_lost_resolution_only_updates_probed_identity"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/claude_inbox.py",
+  "before": "    return isinstance(record, dict) and record.get(\"messagingSocketPath\") == socket",
+  "after": "    return isinstance(record, dict)",
+  "tests": [
+    "tests/test_claude_inbox.py::test_an_inbox_no_ancestor_records_is_not_used"
+  ]
+}

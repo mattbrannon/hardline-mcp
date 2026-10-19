@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/report.py",
+  "before": "    with closing(sqlite3.connect(db.as_uri() + \"?mode=ro\", uri=True, timeout=5)) as conn:\n",
+  "after": "    with closing(__import__('hardline_mcp.mailbox').mailbox._connect(db)) as conn:\n",
+  "tests": [
+    "tests/test_report.py::test_the_audit_never_writes"
+  ]
+}

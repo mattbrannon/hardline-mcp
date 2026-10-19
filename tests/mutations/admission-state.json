@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        \"accepted\": True,\n        \"state\": state,",
+  "after": "        \"accepted\": True,\n        \"state\": jobs.RUNNING,",
+  "tests": [
+    "tests/test_admission.py::test_receipt_reports_queued_without_waiting_and_completion_releases_slot"
+  ]
+}

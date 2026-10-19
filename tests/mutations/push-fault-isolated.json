@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/channel.py",
+  "before": "            except Exception as exc:  # noqa: BLE001 - isolation is the point\n",
+  "after": "            except ZeroDivisionError as exc:  # noqa: BLE001 - isolation is the point\n",
+  "tests": [
+    "tests/test_channel.py::test_a_pusher_fault_never_stops_the_tools"
+  ]
+}

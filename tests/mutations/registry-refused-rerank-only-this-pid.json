@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/sessions.py",
+  "before": "                            \" WHERE pid = ? AND lane = ? AND process_key IS ?\",\n                            (rank[lane], pid, lane, key),",
+  "after": "                            \" WHERE ? > 0 AND lane = ? AND (process_key IS ? OR 1)\",\n                            (rank[lane], pid, lane, key),",
+  "tests": [
+    "tests/test_sessions.py::test_a_refused_lane_keeps_its_place_without_being_granted"
+  ]
+}

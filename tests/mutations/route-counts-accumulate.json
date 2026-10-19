@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "self.routes[counter] = self.routes.get(counter, 0) + 1",
+  "after": "self.routes[counter] = 1",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_the_counts_accumulate_and_the_last_route_is_the_latest"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        if note in _revision_told:\n            return None\n",
+  "after": "",
+  "tests": [
+    "tests/test_server.py::test_inbox_says_a_moved_checkout_once_per_revision"
+  ]
+}

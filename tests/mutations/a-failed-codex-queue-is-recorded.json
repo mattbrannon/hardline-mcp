@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/codex_queue.py",
+  "before": "            self._route(\"failed\", f\"{why}; codex queue failed: {result.get('error')}\")\n",
+  "after": "            pass\n",
+  "tests": [
+    "tests/test_codex_route_facts.py::test_a_failed_queue_records_why_and_counts_nothing"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "                **({\"model_hint\": hint} if hint else {}),\n",
+  "after": "",
+  "tests": [
+    "tests/test_model_routing.py::test_an_async_job_carries_the_hint_wherever_it_is_read[asyncio-codex-fable-ask_claude]",
+    "tests/test_model_routing.py::test_an_async_job_carries_the_hint_wherever_it_is_read[asyncio-claude-astra-ask_codex]"
+  ]
+}

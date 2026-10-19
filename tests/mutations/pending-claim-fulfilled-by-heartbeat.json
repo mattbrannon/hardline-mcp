@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "    _announce_self()\n    _fulfil_pending()\n",
+  "after": "    _announce_self()\n",
+  "tests": [
+    "tests/test_continuity.py::test_the_heartbeat_fulfils_a_waiting_claim"
+  ]
+}

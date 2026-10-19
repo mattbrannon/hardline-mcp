@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/github_context.py",
+  "before": "    complete_listing = snapshot.get(\"changed_files\") == listed",
+  "after": "    complete_listing = snapshot.get(\"changed_files\") in (None, listed)",
+  "tests": [
+    "tests/test_github_context.py::test_an_unreported_file_count_is_partial",
+    "tests/test_github_context.py::test_no_files_at_all_is_not_complete_coverage"
+  ]
+}

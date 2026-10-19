@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    return model.get(\"visibility\") == \"list\" and model.get(\"upgrade\") is None\n",
+  "after": "    return model.get(\"upgrade\") is None\n",
+  "tests": [
+    "tests/test_model_routing.py::test_list_models_names_each_tool_and_what_it_takes"
+  ]
+}

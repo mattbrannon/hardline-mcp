@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    return [agent_command(agent).executable, *_DISPATCH[agent][1]]\n",
+  "after": "    default_exe, subcmd, env_var = _DISPATCH[agent]\n    return [os.environ.get(env_var) or default_exe, *subcmd]\n",
+  "tests": [
+    "tests/test_server.py::test_server_info_reports_what_dispatch_would_run"
+  ]
+}
