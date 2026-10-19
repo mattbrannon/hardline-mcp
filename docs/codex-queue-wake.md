@@ -259,10 +259,17 @@ is not a client identity). Their notices are in no total. A row's zeros mean no
 counted route outcome, not no notice: a failed queue, possibly after
 committing, is recorded as `failed` but counted nowhere.
 
-`report` also has a `stalled_wakes` section: live servers whose wake has owed a
-receipt for at least the delivery grace (10 min) while their registered lanes
-hold unread mail, with `servers_with_facts` and `servers_without_facts`. It is
-evidence, not proof of a failed transport.
+`report` also has a `stalled_wakes` section: live servers whose registered
+lanes hold mail past the delivery grace (10 min) that their wake has not got
+read. Three lists:
+- **`stalled`:** a notice has owed its receipt that long.
+- **`unannounced`:** nothing is owed, yet mail arrived after the last notice,
+  or no notice was ever sent. A free wake announces new mail within a poll.
+- **`unwatched`:** the server records no wake facts at all, so neither can be
+  shown. Older code, or a subagent's server, which never pins a thread: mail
+  to a subagent's lane is never announced.
+
+Each is evidence, not proof of a failed transport.
 
 ### Delivery state and receipts
 

@@ -332,6 +332,63 @@ def test_unread_mail_is_counted_by_recipient_and_held_or_not(tmp_path, monkeypat
     assert mail["lanes_not_shown"] == mail["bare_not_shown"] == 0
 
 
+def test_mail_no_wake_got_read_is_listed_three_ways(tmp_path, monkeypatch):
+    """Stalled on a receipt, unannounced by a free wake, or unwatched: each
+    past the grace, joined on the creation token, the dead never listed."""
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    ago = lambda minutes: mailbox._iso(now - timedelta(minutes=minutes))  # noqa: E731
+    gone = 2147483646
+    db = tmp_path / "mb.db"
+    mailbox.send("x", "nobody", "creates the store", db_path=db)
+    monkeypatch.setattr(
+        report, "instance_state", lambda pid, *_a, **_k: procid.DEAD if pid == gone else procid.ALIVE
+    )
+    raw = sqlite3.connect(db)
+    with raw:
+        raw.execute("DELETE FROM messages")
+        raw.executemany(
+            "INSERT INTO agent_sessions (pid, lane, agent, process_key, started_at,"
+            " last_seen, claimed_at) VALUES (?, ?, 'codex', ?, 't', 't', 't')",
+            [(1, "codex:a", "k1"), (2, "codex:b", "k2"), (3, "codex:quiet", "k3"),
+             (4, "codex:c", "k4"), (5, "codex:e", "k5"), (6, "codex:f", "new"),
+             (7, "codex:d", "k7"), (gone, "codex:g", "kg")],
+        )
+        raw.executemany(
+            "INSERT INTO push_delivery (pid, process_key, declared_at, last_push_at,"
+            " oldest_unreceipted_at) VALUES (?, ?, 't', ?, ?)",
+            [(1, "k1", ago(60), ago(60)),   # owed past the grace: stalled
+             (2, "k2", ago(2), ago(2)),     # owed within the grace
+             (3, "k3", ago(60), ago(60)),   # owed, nothing waiting
+             (4, "k4", ago(30), None),      # receipted 30 minutes ago
+             (7, "k7", None, None),         # declared, never sent
+             (6, "old", ago(60), ago(60)),  # an earlier process on pid 6
+             (gone, "kg", ago(60), ago(60))],
+        )
+        raw.executemany(
+            "INSERT INTO messages (sender, recipient, body, created_at) VALUES ('x', ?, 'b', ?)",
+            [("codex:a", ago(1)), ("codex:a", ago(1)),  # the whole backlog waits on the receipt
+             ("codex:b", ago(60)),
+             ("codex:c", ago(60)),  # before the last notice: deferred, not unannounced
+             ("codex:c", ago(20)),  # after it, past the grace
+             ("codex:c", ago(2)),   # after it, within the grace
+             ("codex:d", ago(60)),
+             ("codex:e", ago(60)), ("codex:e", ago(2)),
+             ("codex:f", ago(60)),
+             ("codex:g", ago(60))],
+        )
+    raw.close()
+
+    got = report.report(db)["stalled_wakes"]
+    listed = lambda kind: [(e["pid"], e["unread"]) for e in got.get(kind, [])]  # noqa: E731
+    assert listed("stalled") == [(1, {"codex:a": 2})], got
+    assert listed("unannounced") == [(4, {"codex:c": 1}), (7, {"codex:d": 1})], got
+    assert listed("unwatched") == [(5, {"codex:e": 1}), (6, {"codex:f": 1})], got
+    assert got["unannounced"][0]["since"] == ago(20)
+    assert (got.get("servers_with_facts"), got.get("servers_without_facts")) == (5, 2), got
+
+
 def test_unread_mail_lists_are_bounded_but_totals_are_whole(tmp_path):
     db = tmp_path / "mb.db"
     for i in range(report.SAMPLE + 3):

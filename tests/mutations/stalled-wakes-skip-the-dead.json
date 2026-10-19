@@ -3,6 +3,6 @@
   "before": "        if _is_live(s, probe):\n            lanes.setdefault",
   "after": "        if True:\n            lanes.setdefault",
   "tests": [
-    "tests/test_unsettled_notices.py::test_report_lists_wakes_owing_a_receipt_while_their_lanes_wait"
+    "tests/test_report.py::test_mail_no_wake_got_read_is_listed_three_ways"
   ]
 }
