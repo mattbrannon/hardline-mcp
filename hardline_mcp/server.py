@@ -899,6 +899,8 @@ def _send_impl(from_agent: str, to_agent: str, message: str, deliver: bool) -> d
         except Exception:  # noqa: BLE001 - never fail a send over reporting
             holders = []
         result["recipient_delivery"] = _delivery_of(holders)
+        if result["recipient_delivery"] == delivery.NOT_TOP_LEVEL:
+            result["recipient_note"] = NOT_TOP_LEVEL_NOTE
     if deliver:
         notice = (
             f"[hardline] new message #{result['message_id']} from {sender}. "
@@ -913,23 +915,32 @@ def _send_impl(from_agent: str, to_agent: str, message: str, deliver: bool) -> d
     return result
 
 
+NOT_TOP_LEVEL_NOTE = (
+    "This lane's holder has been called only from a Codex thread that is not "
+    "top-level (a subagent's, as Codex names it), so its automatic wake is "
+    "currently unarmed. The message is stored, and the holder can still read it "
+    "with inbox. A subagent's server may exit with the subagent, leaving the "
+    "message on a lane nobody holds. To reach the session that started it, "
+    "address that session's lane or a name it claimed."
+)
+
+
 def _delivery_of(holders: list[dict]) -> str:
     """Push delivery state of a lane's live holders; ``unknown`` without proof.
 
     Unknown, never "none": a holder with no record may be older code, a client
     without channel support, or a session nobody pushes to - absence of a
-    record is not evidence of anything.
+    record is not evidence of anything. So one state only when every holder
+    records it: a holder without a record keeps the answer unknown.
     """
     try:
-        facts = delivery.facts_for(
-            [(h["pid"], h["process_key"]) for h in holders]
+        recorded = delivery.states_for(
+            [(h["pid"], h["process_key"]) for h in holders], mailbox._default_now()
         )
     except Exception:  # noqa: BLE001 - reporting must never fail a call
         return "unknown"
-    now = mailbox._default_now()
-    states = {delivery.derive(facts.get((h["pid"], h["process_key"])), now) for h in holders}
-    states.discard(None)
-    return states.pop() if len(states) == 1 else "unknown"
+    states = {recorded.get((h["pid"], h["process_key"])) for h in holders}
+    return states.pop() if len(states) == 1 and None not in states else "unknown"
 
 
 @mcp.tool()
@@ -1150,15 +1161,15 @@ async def list_agents() -> dict:
     seen_senders = await _in_thread(mailbox.senders)
     live = await _in_thread(sessions.live)
     try:
-        facts = await _in_thread(
-            delivery.facts_for, [(s["pid"], s["process_key"]) for s in live]
+        states = await _in_thread(
+            delivery.states_for,
+            [(s["pid"], s["process_key"]) for s in live],
+            mailbox._default_now(),
         )
     except Exception:  # noqa: BLE001 - reporting must never fail the listing
-        facts = {}
-    now = mailbox._default_now()
+        states = {}
     for session in live:
-        state = delivery.derive(facts.get((session["pid"], session["process_key"])), now)
-        session["delivery"] = state or "unknown"
+        session["delivery"] = states.get((session["pid"], session["process_key"]), "unknown")
     # EVERY lane each session holds, not just the name it is currently
     # addressed by. A renamed session still consumes its previous lanes, so
     # collapsing to the current name here would mark them dead and count their

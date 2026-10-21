@@ -20,7 +20,7 @@ import os
 import uuid
 from typing import Callable, Optional
 
-from . import adapters, announce, codex_steer
+from . import adapters, announce, codex_steer, delivery
 
 CLIENT = "codex-mcp-client"
 UNDECIDED = "not decided yet"  # queue until steering is known to work
@@ -182,6 +182,14 @@ class CodexWake(announce.Announcer):
         with self._lock:
             self._notes.append(line)
 
+    def state(self) -> Optional[str]:
+        """``not_top_level`` while unpinned and so marked, as readers of the
+        route row see it; otherwise the derived push state."""
+        with self._lock:
+            if not self.facts and self.routes.get("last_route") == delivery.NOT_TOP_LEVEL:
+                return delivery.NOT_TOP_LEVEL
+        return super().state()
+
     def declare(self) -> None:
         """Pinned: also a route row at zero, so ``report`` tells a wake that has
         sent nothing yet from a server that records no routes. Caller holds
@@ -217,8 +225,18 @@ class CodexWake(announce.Announcer):
         thread, turn = parsed
         with self._lock:
             if self.address is None:
-                if turn.get("thread_source") != "user":
-                    return  # only a top-level thread is ever the address
+                source = turn.get("thread_source")
+                if source != "user":
+                    # Only a top-level thread is ever the address. One Codex
+                    # names as another kind is recorded, so a sender learns
+                    # nothing will announce this lane's mail (#109); a missing
+                    # or malformed source is no evidence of either.
+                    if isinstance(source, str) and source and self.routes.get("last_route") is None:
+                        self.routes["last_route"] = delivery.NOT_TOP_LEVEL
+                        self.routes["last_route_reason"] = f"thread_source {source!r}"
+                        self._routes_dirty = True
+                    return
+                self.routes = {}  # pinned after all: not what the row said
                 self.address = thread
                 self.declare()
                 # The first poll after the pin restores this thread's names

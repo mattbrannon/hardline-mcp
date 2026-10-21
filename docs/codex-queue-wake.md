@@ -253,21 +253,27 @@ pruned with `push_delivery`'s. A wake writes its row, at zero, when it pins its
 thread, so a wake that has sent nothing yet is told apart from a server that
 records no routes. `hardline-mcp report` shows the rows under `codex_routes`,
 with `codex_lane_servers_without_row`: registered processes not shown dead that
-hold a `codex:` lane and wrote no row (older code, a subagent's server that
-never pins, a failed write, or a client that is not Codex at all: a lane prefix
-is not a client identity). Their notices are in no total. A row's zeros mean no
+hold a `codex:` lane and wrote no row (older code, a server not yet called, a
+failed write, or a client that is not Codex at all: a lane prefix is not a
+client identity). Their notices are in no total. A server whose first call
+comes from a thread that is not top-level writes a row whose `last_route` is
+`not_top_level`, with the `thread_source` as its reason (#109). A row's zeros mean no
 counted route outcome, not no notice: a failed queue, possibly after
 committing, is recorded as `failed` but counted nowhere.
 
 `report` also has a `stalled_wakes` section: live servers whose registered
 lanes hold mail past the delivery grace (10 min) that their wake has not got
-read. Three lists:
+read. Four lists:
 - **`stalled`:** a notice has owed its receipt that long.
 - **`unannounced`:** nothing is owed, yet mail arrived after the last notice,
   or no notice was ever sent. A free wake announces new mail within a poll.
+- **`not_top_level`:** a server marked `not_top_level`, called only from a
+  thread Codex names as not top-level (a subagent's). Its wake is not armed,
+  so nothing announces its lanes' mail. The subagent can still read it, but
+  what it leaves is stranded when its server exits with it.
 - **`unwatched`:** the server records no wake facts at all, so neither can be
-  shown. Older code, or a subagent's server, which never pins a thread: mail
-  to a subagent's lane is never announced.
+  shown. Older code, or a Codex server never called: a subagent's server that
+  never calls hardline cannot be told from a session that has not called yet.
 
 Each is evidence, not proof of a failed transport.
 
@@ -278,6 +284,11 @@ last receipted push, oldest unreceipted push. So `list_agents().you.delivery`,
 `live_sessions[].delivery` and `send`'s `recipient_delivery` report Codex
 sessions too.
 - **`declared`** means armed (address pinned), not working.
+- **`not_top_level`** is a server so marked. `send` adds a `recipient_note`:
+  the wake is not armed, so nothing will announce the message, but the
+  holder can still read it. Push facts outrank the mark. Every holder must
+  agree: a holder with no record keeps the lane `unknown`. Only a named
+  `thread_source` marks a server; a missing or malformed one is no evidence.
 - **A receipt proves only its own notice.** There's no cumulative coverage.
 - **Routing.** `inbox(receipt=...)` offers the nonce to both transports. Only
   the one that issued it accepts.
