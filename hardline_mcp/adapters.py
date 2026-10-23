@@ -2928,6 +2928,55 @@ def _ask_codex_validated(
 
 _CODEX_GIT_REFUSAL = "--skip-git-repo-check was not specified"
 
+# Codex 0.164.0 reads AGENTS.md through a sandboxed helper once a permission
+# profile denies any path, and on Windows that helper's MXC container is given
+# an environment without SYSTEMROOT: every thread/start fails, before any turn
+# (measured 2026-10-23, openai/codex#56264; no -c override restores it). So a
+# call refused exactly so, with nothing on stdout - a started thread's first
+# event is thread.started - runs once more without AGENTS.md, told to read the
+# files itself, and says so. The refusing binary is remembered for a while,
+# so later calls skip the doomed attempt; a Codex update is a new binary.
+_CODEX_DOCS_REFUSALS = ("failed to load AGENTS.md instructions", "thread/start failed", "SYSTEMROOT")
+_CODEX_NO_DOCS = ["-c", "project_doc_max_bytes=0"]
+_CODEX_NO_DOCS_INTAKE = (
+    "[hardline] Codex could not load AGENTS.md for this run (a Codex defect). Before "
+    "anything else, read with your shell the AGENTS.md files that would have applied - the "
+    "one in your Codex home (CODEX_HOME, default ~/.codex), then each from the repository "
+    "root down to the working directory, an AGENTS.override.md taking its directory's "
+    "place - and follow them as if they had been loaded. The request follows.\n\n"
+)
+_CODEX_NO_DOCS_NOTE = (
+    "Codex could not load AGENTS.md under this call's sandbox (a Codex 0.164 defect): it "
+    "ran without them, told to read them with its shell"
+)
+# A launcher's mtime need not change when Codex updates, so the memory expires.
+_CODEX_NO_DOCS_MEMORY_S = 3600.0
+_codex_docs_refused_by: dict[str, tuple] = {}  # exe -> (mtime_ns or None, monotonic at refusal)
+
+
+def _modified(exe: str) -> int | None:
+    try:
+        return os.stat(exe).st_mtime_ns
+    except OSError:
+        return None
+
+
+def _docs_refused_recently(exe: str) -> bool:
+    seen = _codex_docs_refused_by.get(exe)
+    return (
+        seen is not None
+        and seen[0] == _modified(exe)
+        and time.monotonic() - seen[1] < _CODEX_NO_DOCS_MEMORY_S
+    )
+
+
+def _refused_docs(run: dict) -> bool:
+    return (
+        not run.get("ok")
+        and not (run.get("_stdout") or "").strip()  # no thread started
+        and all(s in (run.get("error") or "") for s in _CODEX_DOCS_REFUSALS)
+    )
+
 
 def _ask_codex_structured(
     prompt: str,
@@ -3033,19 +3082,37 @@ def _ask_codex_structured(
         if refusal is not None:
             return refusal
         argv += isolation
-        run = _run_agent_cmd(
-            "codex",
-            argv + ["--", prompt],
-            env=child_env,
-            cwd=run_cwd,
-            streaming=True,  # --json, above
-            capture_failed_output=True,
-            on_spawn=on_spawn,
-            stdin_text=attachment["stdin"] if attachment is not None else None,
-        )
+
+        def spawn(no_docs: bool) -> dict:
+            tail = _CODEX_NO_DOCS + ["--", _CODEX_NO_DOCS_INTAKE + prompt] if no_docs else ["--", prompt]
+            return _run_agent_cmd(
+                "codex",
+                argv + tail,
+                env=child_env,
+                cwd=run_cwd,
+                streaming=True,  # --json, above
+                capture_failed_output=True,
+                on_spawn=on_spawn,
+                stdin_text=attachment["stdin"] if attachment is not None else None,
+            )
+
+        no_docs = sandbox.profile and _docs_refused_recently(exe)
+        run = spawn(no_docs)
+        if sandbox.profile and not no_docs and _refused_docs(run):
+            _codex_docs_refused_by[exe] = (_modified(exe), time.monotonic())
+            no_docs = True
+            run = spawn(no_docs)
     finally:
         if neutral_root:
             shutil.rmtree(neutral_root, ignore_errors=True)
+    result = _codex_outcome(run, model, effort, subscription_configured)
+    if no_docs:
+        result["instructions_note"] = _CODEX_NO_DOCS_NOTE
+    return result
+
+
+def _codex_outcome(run: dict, model: str | None, effort: str, subscription_configured) -> dict:
+    """One finished ``codex exec --json`` run as the call's result."""
     failed_output = run.pop("_stdout", "")
     if not run.get("ok") and _CODEX_GIT_REFUSAL in (run.get("error") or ""):
         run["hint"] = (
