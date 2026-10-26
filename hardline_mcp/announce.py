@@ -266,6 +266,64 @@ class Announcer:
 
     # ── the loop ─────────────────────────────────────────────────────────────
 
+    def _dispatch(self, address: object, nonce: str, ids: Optional[set[int]]) -> None:
+        """Recheck an initial, provably unsent reservation beside its send.
+
+        Retries may already have delivered, so acking their mail cannot cancel
+        them. The initial batch alone absorbs arrivals during its fixed window;
+        mutate its ids too, so NotSent rolls back the entire batch.
+        """
+        if ids is not None:
+            try:
+                owned = adapters.owned_recipients()
+                rows, _ = channel.unread(owned)  # bounded scan; leave the poll cursor alone
+                with self._lock:
+                    previous = dict(self._previous_pointed)
+                    pointed = dict(self.pointed)
+                hint_lanes = {
+                    lane for lane, newest in pointed.items() if newest > previous.get(lane, 0)
+                }
+                # Unlike waiting_before(), this must not hide a read failure as
+                # evidence that the reserved hint has nothing left to announce.
+                hints = (
+                    channel.waiting(tuple(hint_lanes & set(channel.held_before())))
+                    if hint_lanes else {}
+                )
+                hinted = any(newest > previous.get(lane, 0) for lane, (newest, _) in hints.items())
+                pending_recipients = set()
+                reserved = sorted(ids)
+                for start in range(0, len(reserved), 500):
+                    part = tuple(reserved[start:start + 500])
+                    marks = ",".join("?" for _ in part)
+                    # Exact reserved ids: a full inbox page cannot hide the
+                    # reservation, nor can unrelated newer mail keep it alive.
+                    pending_recipients.update(
+                        row["recipient"]
+                        for row in channel._read(
+                            f"SELECT recipient FROM messages WHERE id IN ({marks}) AND acked_at IS NULL",
+                            part,
+                        )
+                    )
+                held = set(sessions.granted(adapters.owned_recipients()))
+                pending = bool(pending_recipients & held)
+                with self._lock:
+                    cancel = self.stopped or not (pending or hinted)
+                    if not cancel and self.outstanding is not None and self.outstanding[0] == nonce:
+                        batched = {r["id"] for r in rows if r["recipient"] in held} - self.announced
+                        self.announced |= batched
+                        ids |= batched
+                        self.pointed.update({lane: newest for lane, (newest, _) in hints.items()})
+                    else:
+                        cancel = True
+                if cancel:
+                    self.take_back(nonce, ids)
+                    return
+            except Exception as exc:
+                # All failures above precede transport dispatch. Roll back and
+                # poll again, rather than treating an unreadable store as empty.
+                raise NotSent(f"reservation not revalidated: {exc}") from exc
+        self.send(address, self.notice(nonce))
+
     async def run(self, initialized: anyio.Event, client: dict) -> None:
         """Wake until cancelled, for this one's client only."""
         await initialized.wait()
@@ -281,8 +339,11 @@ class Announcer:
                 due = await anyio.to_thread.run_sync(self.poll)
                 if due:
                     address, nonce, ids = due
+                    if ids is not None:
+                        # One fixed window, never extended by later arrivals.
+                        await anyio.sleep(self.poll_s)
                     try:
-                        await anyio.to_thread.run_sync(self.send, address, self.notice(nonce))
+                        await anyio.to_thread.run_sync(self._dispatch, address, nonce, ids)
                     except NotSent as exc:
                         if ids is None:  # a resend: the first may still have landed
                             self.unsettled(nonce, f"not sent: {exc}")

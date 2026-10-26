@@ -31,6 +31,13 @@ the implementation. Both records are at the end.
 
 ### One core, two addresses
 
+Before an initial transport attempt, the shared announcer batches arrivals
+for one polling interval (normally 2 s) and revalidates unread mail and lane
+ownership. A notice whose triggers were consumed is cancelled before sending.
+The window has a fixed deadline, so continuous mail cannot postpone delivery.
+Already attempted notices retain the receipt and retry rules below; a notice
+already accepted by the host cannot be withdrawn.
+
 `announce.Announcer` is the notice wake, extracted from Codex queue-wake
 ([design](codex-queue-wake.md)): new mail only, over granted lanes; one notice
 outstanding, reserved before the attempt and released only by its own

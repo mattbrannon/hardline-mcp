@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                pending = bool(pending_recipients & held)\n",
+  "after": "                pending = True\n",
+  "tests": [
+    "tests/test_announce_batch.py::test_ack_between_reservation_and_dispatch_cancels_unsent_notice",
+    "tests/test_announce_batch.py::test_mail_arriving_during_cancellation_gets_its_own_window"
+  ]
+}

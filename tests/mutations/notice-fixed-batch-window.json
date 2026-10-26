@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                    if ids is not None:\n                        # One fixed window, never extended by later arrivals.\n                        await anyio.sleep(self.poll_s)\n",
+  "after": "                    if ids is not None:\n                        # One fixed window, never extended by later arrivals.\n                        await anyio.sleep(0)\n",
+  "tests": [
+    "tests/test_announce_batch.py::test_burst_is_one_fixed_window_and_one_receipt",
+    "tests/test_announce_batch.py::test_continuous_arrivals_cannot_extend_the_window"
+  ]
+}

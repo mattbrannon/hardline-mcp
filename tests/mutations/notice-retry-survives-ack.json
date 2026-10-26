@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "        if ids is not None:\n            try:\n                owned = adapters.owned_recipients()\n",
+  "after": "        if ids is None:\n            return\n        if ids is not None:\n            try:\n                owned = adapters.owned_recipients()\n",
+  "tests": [
+    "tests/test_announce_batch.py::test_ambiguous_retry_keeps_nonce_after_ack_without_another_batch"
+  ]
+}

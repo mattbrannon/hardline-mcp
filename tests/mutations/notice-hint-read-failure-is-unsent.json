@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                    channel.waiting(tuple(hint_lanes & set(channel.held_before())))\n",
+  "after": "                    channel.waiting_before()\n",
+  "tests": [
+    "tests/test_announce_batch.py::test_hint_revalidation_failure_is_unsent_and_retried"
+  ]
+}

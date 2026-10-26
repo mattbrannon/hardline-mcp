@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                    cancel = self.stopped or not (pending or hinted)\n",
+  "after": "                    cancel = not (pending or hinted)\n",
+  "tests": [
+    "tests/test_announce_batch.py::test_changes_during_the_final_mail_read_cancel_initial_dispatch"
+  ]
+}
