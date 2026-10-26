@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                pending = bool(pending_recipients & held)\n",
+  "after": "                pending = any(r['id'] in ids and r['recipient'] in held for r in rows)\n",
+  "tests": [
+    "tests/test_announce_batch.py::test_reserved_id_beyond_front_page_still_dispatches"
+  ]
+}

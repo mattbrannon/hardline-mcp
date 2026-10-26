@@ -332,6 +332,17 @@ sessions too.
 
 ### Lifecycle (accepted, stated)
 
+- **Before first dispatch:** the shared announcer waits one polling interval
+  (normally 2 s), then rechecks the reserved unread mail and lane ownership.
+  Mail consumed during that window needs no notice. If a trigger remains,
+  other scanned arrivals share the notice; continuing arrivals do not extend
+  the deadline.
+  Formerly held lane hints are checked separately. An unavailable store is
+  not evidence that the inbox is empty. This applies only before any transport
+  attempt: ambiguous retries keep their original receipt and delivery rules.
+  Once Codex accepts a notice, Hardline cannot retract it; an inbox poll can
+  still overtake that queued notice.
+
 - **Interrupted.** A queued notice is held until the user resumes, and runs
   then: harmless, a pointer to an inbox. A steered notice is dropped by the
   interrupt, and waking pauses until a later receipt (rev 3).

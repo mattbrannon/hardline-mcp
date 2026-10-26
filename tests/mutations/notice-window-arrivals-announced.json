@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                        self.announced |= batched\n",
+  "after": "                        self.announced |= set()\n",
+  "tests": [
+    "tests/test_announce_batch.py::test_burst_is_one_fixed_window_and_one_receipt"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/announce.py",
+  "before": "                        ids |= batched\n",
+  "after": "                        ids |= set()\n",
+  "tests": [
+    "tests/test_announce_batch.py::test_not_sent_restores_every_id_absorbed_in_the_window"
+  ]
+}
