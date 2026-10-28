@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    return stat.S_ISDIR(info.st_mode) and not _is_link(info) and (root / \".git\" / \"HEAD\").is_file()\n",
+  "after": "    return stat.S_ISDIR(info.st_mode) and not _is_link(info)\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_a_git_directory_must_be_a_repository_of_its_own[empty]"
+  ]
+}

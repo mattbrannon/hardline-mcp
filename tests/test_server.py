@@ -433,6 +433,7 @@ async def test_ask_codex_forwards_model_effort_mode_workdir_and_write(monkeypatc
         github=None,
         github_exclude=None,
         on_spawn=None,
+        context="default",
     ):
         captured.update(
             prompt=prompt,
@@ -443,6 +444,7 @@ async def test_ask_codex_forwards_model_effort_mode_workdir_and_write(monkeypatc
             write=write,
             github=github,
             github_exclude=github_exclude,
+            context=context,
         )
         return {"ok": True, "reply": "reviewed", "usage": {"input_tokens": 10}}
 
@@ -455,6 +457,7 @@ async def test_ask_codex_forwards_model_effort_mode_workdir_and_write(monkeypatc
         mode="advisory",
         github="octo/repo#7",
         github_exclude=["*.lock"],
+        context="clean",
     )
 
     assert result["ok"] is True
@@ -467,6 +470,7 @@ async def test_ask_codex_forwards_model_effort_mode_workdir_and_write(monkeypatc
         "write": False,
         "github": "octo/repo#7",
         "github_exclude": ["*.lock"],
+        "context": "clean",
     }
 
 

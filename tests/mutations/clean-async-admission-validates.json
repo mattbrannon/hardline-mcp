@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "        context=context,\n        **github_kwargs,\n    )\n    if error:",
+  "after": "        **github_kwargs,\n    )\n    if error:",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_async_admission_refuses_an_unkeepable_clean_request"
+  ]
+}

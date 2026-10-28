@@ -1,7 +1,7 @@
 {
   "file": "hardline_mcp/server.py",
-  "before": "        write=write,\n        **github_kwargs,\n    )\n    if error:",
-  "after": "        write=write,\n    )\n    if error:",
+  "before": "        write=write,\n        context=context,\n        **github_kwargs,\n    )\n    if error:",
+  "after": "        write=write,\n        context=context,\n    )\n    if error:",
   "tests": [
     "tests/test_github_forwarding.py::test_async_admission_rejects_bad_github_before_queueing"
   ]

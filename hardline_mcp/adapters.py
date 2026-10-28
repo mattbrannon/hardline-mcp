@@ -39,12 +39,14 @@ Only the executable is resolved this way; the fixed subcommand
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import math
 import os
 import re
 import secrets
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -127,6 +129,9 @@ _CODEX_EFFORTS = frozenset(
     {"default", "low", "medium", "high", "xhigh", "max", "ultra"}
 )
 _CODEX_MODES = frozenset({"default", "advisory"})
+# A Codex child's context: the user's ("default"), or "clean" - see
+# _validate_clean and _clean_report for what that removes and what it does not.
+_CODEX_CONTEXTS = frozenset({"default", "clean"})
 _CODEX_AUTH_OVERRIDE_ENV = frozenset(
     {
         "OPENAI_API_KEY",
@@ -314,7 +319,17 @@ def _codex_home_entries(codex_home: Path) -> list[Path]:
     ]
 
 
-def _codex_unreadable(env: dict[str, str]) -> list[Path]:
+def _clean_denied_whole(env: dict[str, str]) -> list[Path]:
+    """What a clean context denies whole: every user Codex home but the
+    child's own (``env``'s), and the user-level ``~/.agents``."""
+    own = Path(env["CODEX_HOME"])
+    homes = [Path.home() / ".codex"]
+    if os.environ.get("CODEX_HOME"):
+        homes.append(Path(os.environ["CODEX_HOME"]))
+    return [h for h in dict.fromkeys(homes) if h != own] + [Path.home() / ".agents"]
+
+
+def _codex_unreadable(env: dict[str, str], clean: bool = False) -> list[Path]:
     """What no command of a spawned Codex may read: the credentials,
     configuration and transcripts of the agents hardline connects, gh's
     token, hardline's mail, and SSH keys.
@@ -323,6 +338,11 @@ def _codex_unreadable(env: dict[str, str]) -> list[Path]:
     Claude or Codex home does not prove the default one empty. A Codex home of
     the child's own (advisory's copy of auth.json) is denied beside the
     user's.
+
+    A ``clean`` context's child runs from a home of its own, so the user's
+    homes hold nothing it needs: they are denied whole, the instructions and
+    skills otherwise left readable included, and ``~/.agents`` beside them.
+    Only the child's own home keeps its readable entries.
     """
     home = Path.home()
     store = mailbox._resolve_db(None)
@@ -342,9 +362,14 @@ def _codex_unreadable(env: dict[str, str]) -> list[Path]:
     codex_homes = dict.fromkeys(
         [home / ".codex", *(Path(s["CODEX_HOME"]) for s in (os.environ, env) if s.get("CODEX_HOME"))]
     )
+    whole = []
+    if clean:
+        whole = _clean_denied_whole(env)
+        codex_homes = {Path(env["CODEX_HOME"]): None}
     return [
         *claude_homes,
         home / ".claude.json",
+        *whole,
         *(entry for codex_home in codex_homes for entry in _codex_home_entries(codex_home)),
         *gh_homes,
         home / ".cache" / "hardline-mcp",
@@ -371,7 +396,9 @@ _CODEX_NO_SECRET_ENV = ["-c", "shell_environment_policy.ignore_default_excludes=
 _CREDENTIAL_NAME = re.compile("KEY|SECRET|TOKEN", re.IGNORECASE)  # Codex's default excludes
 
 
-def _codex_pin(sandbox: _CodexSandbox, write: bool, env: dict, cwd: str | None) -> list[str]:
+def _codex_pin(
+    sandbox: _CodexSandbox, write: bool, env: dict, cwd: str | None, clean: bool = False
+) -> list[str]:
     """The sandbox a spawned Codex is held to: read-only unless ``write``,
     and with no credential its commands could inherit (``_CODEX_NO_SECRET_ENV``).
 
@@ -398,7 +425,7 @@ def _codex_pin(sandbox: _CodexSandbox, write: bool, env: dict, cwd: str | None) 
         return _CODEX_NO_SECRET_ENV + ["--sandbox", "workspace-write" if write else "read-only"]
     spellings = dict.fromkeys(
         next((above for above in reversed(spelling.parents) if not above.exists()), spelling)
-        for path in _codex_unreadable(env)
+        for path in _codex_unreadable(env, clean)
         for spelling in (Path(os.path.abspath(path)), path.resolve())
     )
     access = {
@@ -459,7 +486,9 @@ def _codex_canary() -> Path:
     return canary
 
 
-def _codex_sandbox_started(exe: str, overrides: list[str], env: dict, cwd: str | None, on_spawn=None) -> dict:
+def _codex_sandbox_started(
+    exe: str, overrides: list[str], env: dict, cwd: str | None, on_spawn=None, clean: bool = False
+) -> dict:
     """The run of hardline's own Python under ``overrides`` - the very sandbox
     and pin the call will use - through ``codex sandbox``, in the child's own
     environment and directory, under ``on_spawn``: proof that the policy holds
@@ -480,7 +509,7 @@ def _codex_sandbox_started(exe: str, overrides: list[str], env: dict, cwd: str |
     managed = ["--permission-profile", profile[0], "--include-managed-config"] if profile else []
     try:
         denied = [str(_codex_canary())]
-        denied += [str(path) for path in _codex_unreadable(env) if path.exists()]
+        denied += [str(path) for path in _codex_unreadable(env, clean) if path.exists()]
     except (OSError, ValueError) as exc:
         return {"ok": False, "error": f"cannot prepare the sandbox check: {exc}"}
     probe_env = _agent_env({**env, _CODEX_ENV_CANARY: "1"})
@@ -2211,12 +2240,18 @@ def validate_request(
     github: str | None = None,
     github_exclude: list | None = None,
     github_tools: str = "none",
+    context: str = "default",
 ) -> tuple[dict | None, str | None]:
     """Validate invocation options without starting work; resolve its directory.
 
     Shared by direct adapters and async admission, so invalid queued requests
     fail before consuming capacity and direct calls retain the same rules.
     """
+    if context not in _CODEX_CONTEXTS:
+        return {
+            "ok": False,
+            "error": f"unsupported context {context!r}; expected one of {sorted(_CODEX_CONTEXTS)}",
+        }, None
     efforts, modes = {
         "codex": (_CODEX_EFFORTS, _CODEX_MODES),
         "claude": (_CLAUDE_EFFORTS, _CLAUDE_MODES),
@@ -2243,7 +2278,76 @@ def validate_request(
     error = error or _validate_github(
         name, github, github_exclude, github_tools, workdir, write
     )
+    if context == "clean":
+        error = error or _validate_clean(agent, mode, resolved)
     return error or _validate_model(name, model), resolved
+
+
+def _is_link(info: os.stat_result) -> bool:
+    """A symlink, or on Windows any reparse point (a junction among them)."""
+    reparse = getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    return stat.S_ISLNK(info.st_mode) or bool(reparse)
+
+
+def _own_git(root: Path) -> bool:
+    """Whether ``root`` holds a repository of its own: an entry named exactly
+    ``.git`` (Windows would also answer to ``.GIT``, which the digest would
+    then hash), a real directory rather than a link or a worktree's pointer
+    file, with a HEAD in it."""
+    try:
+        if ".git" not in os.listdir(root):
+            return False
+        info = os.lstat(root / ".git")
+    except OSError:
+        return False
+    return stat.S_ISDIR(info.st_mode) and not _is_link(info) and (root / ".git" / "HEAD").is_file()
+
+
+def _validate_clean(agent: str, mode: str, workdir: str | None) -> dict | None:
+    """Where a clean context could not keep its word, refuse rather than run.
+
+    Its word is narrow (``_clean_report`` lists what stays): the user's Codex
+    home - config, rules, AGENTS.md, skills, memories - neither loaded by Codex
+    nor readable to its commands, and instructions from ``workdir`` alone. So
+    ``workdir`` must be a repository's root, or AGENTS.md files and project
+    settings above it apply; and the sandbox must be one that denies reads.
+    Advisory keeps its own, older isolation, unchanged.
+    """
+    def refuse(reason: str) -> dict:
+        return {"ok": False, "error": f"clean context {reason}"}
+
+    if agent != "codex":
+        return refuse("is available for Codex only")
+    if mode == "advisory":
+        return refuse("cannot be combined with advisory mode, which isolates on its own terms")
+    if workdir is None:
+        return refuse("requires workdir, the root of a repository")
+    root = Path(workdir)
+    if not _own_git(root):
+        return refuse(
+            "requires workdir to be a repository's root, with a .git directory of its own: "
+            "instructions and project settings above it would otherwise apply"
+        )
+    if not _codex_sandbox().profile:
+        return refuse(
+            "requires a sandbox that denies reads; this one denies none "
+            "(HARDLINE_CODEX_WINDOWS_SANDBOX=mxc, the default, does)"
+        )
+    homes = [Path.home() / ".codex", Path.home() / ".agents"]
+    if os.environ.get("CODEX_HOME"):
+        homes.append(Path(os.environ["CODEX_HOME"]))
+    root = root.resolve()
+    for home in homes:
+        home = home.resolve()
+        if home == root or home in root.parents:
+            return refuse(f"cannot run inside {home}, which it denies")
+        if root in home.parents:
+            return refuse(f"cannot run around {home}, which it denies and would digest")
+    # Checked here, not only when the home is made, so that an async call is
+    # refused at admission rather than in its worker.
+    if _codex_auth_mode(dict(os.environ)) != "chatgpt":
+        return refuse("requires ChatGPT account authentication")
+    return None
 
 
 # A letters-only Codex model names a FAMILY ("astra"), never a pinned model:
@@ -2271,18 +2375,20 @@ def _strip_codex_api_overrides(env: dict[str, str]) -> None:
             env.pop(name, None)
 
 
-def _prepare_codex_advisory() -> tuple[dict | None, dict | None, str | None]:
+def _prepare_codex_advisory(clean: bool = False) -> tuple[dict | None, dict | None, str | None]:
     """An isolated advisory context: ``(error, env, neutral_root)``.
 
     ChatGPT auth only, API-provider overrides stripped, and a temporary
     CODEX_HOME holding nothing but ``auth.json``, beside an empty
-    ``workspace``. The caller removes ``neutral_root``.
+    ``workspace``. The caller removes ``neutral_root``. A ``clean`` context
+    gets the same home and no workspace: it runs in its own workdir.
     """
     env = dict(os.environ)
     if _codex_auth_mode(env) != "chatgpt":
         return {
             "ok": False,
-            "error": "Codex advisory mode requires ChatGPT account authentication",
+            "error": f"Codex {'clean context' if clean else 'advisory mode'} requires "
+            "ChatGPT account authentication",
             "subscription_configured": False,
             "subscription_verified": None,
         }, None, None
@@ -2293,7 +2399,8 @@ def _prepare_codex_advisory() -> tuple[dict | None, dict | None, str | None]:
         neutral_root = tempfile.mkdtemp(prefix="hardline-mcp-codex-")
         isolated_home = Path(neutral_root) / "codex-home"
         isolated_home.mkdir()
-        (Path(neutral_root) / "workspace").mkdir()
+        if not clean:
+            (Path(neutral_root) / "workspace").mkdir()
         isolated_auth = isolated_home / "auth.json"
         shutil.copyfile(source_home / "auth.json", isolated_auth)
         try:
@@ -2305,13 +2412,16 @@ def _prepare_codex_advisory() -> tuple[dict | None, dict | None, str | None]:
             shutil.rmtree(neutral_root, ignore_errors=True)
         return {
             "ok": False,
-            "error": f"failed to prepare isolated Codex advisory home: {exc}",
+            "error": f"failed to prepare isolated Codex {'clean' if clean else 'advisory'} "
+            f"home: {exc}",
         }, None, None
     env["CODEX_HOME"] = str(isolated_home)
     return None, env, neutral_root
 
 
-def _codex_catalog(mode: str, workdir: str | None) -> tuple[list | None, str | None]:
+def _codex_catalog(
+    mode: str, workdir: str | None, context: str = "default"
+) -> tuple[list | None, str | None]:
     """The model catalog of the Codex that ``ask_codex`` would launch.
 
     Deliberately NOT ``--bundled``: the catalog shipped in the binary is stale
@@ -2323,14 +2433,14 @@ def _codex_catalog(mode: str, workdir: str | None) -> tuple[list | None, str | N
     which only a sandboxed command needs, and the catalog runs none. Advisory runs in a fresh isolated home, because user
     configuration can supply its own catalog (``model_catalog_json``) that the
     advisory call will not see. Measured: an auth-only home refreshes the full
-    account catalog in ~0.35s.
+    account catalog in ~0.35s. A clean context does the same, in its workdir.
     """
     neutral_root = None
-    if mode == "advisory":
-        error, env, neutral_root = _prepare_codex_advisory()
+    if mode == "advisory" or context == "clean":
+        error, env, neutral_root = _prepare_codex_advisory(clean=context == "clean")
         if error is not None:
             return None, error["error"]
-        cwd = str(Path(neutral_root) / "workspace")
+        cwd = workdir if context == "clean" else str(Path(neutral_root) / "workspace")
     else:
         env, cwd = dict(os.environ), workdir
     for name in _AGENT_CHILD_STRIPPED_ENV:
@@ -2405,7 +2515,11 @@ def _select_codex_family(family: str, models: list[dict]) -> tuple[str | None, s
 
 
 def resolve_codex_model(
-    model: str | None, *, mode: str = "default", workdir: str | None = None
+    model: str | None,
+    *,
+    mode: str = "default",
+    workdir: str | None = None,
+    context: str = "default",
 ) -> tuple[str | None, dict | None]:
     """Expand a Codex family name to the newest model the catalog lists.
 
@@ -2422,7 +2536,7 @@ def resolve_codex_model(
     """
     if model is None or not _CODEX_FAMILY.fullmatch(model):
         return model, None
-    models, reason = _codex_catalog(mode, workdir)
+    models, reason = _codex_catalog(mode, workdir, context)
     considered = []
     if models is not None:
         slug, reason, considered = _runs_as(model, models)
@@ -2807,6 +2921,7 @@ def ask_codex(
     github: str | None = None,
     github_exclude: list | None = None,
     github_tools: str = "none",
+    context: str = "default",
 ) -> dict:
     """Query Codex with explicit routing, reading its JSONL events.
 
@@ -2837,6 +2952,10 @@ def ask_codex(
     the host's ``gh`` and piped to the child's stdin; see ``_github_attachment``.
     The child then also runs without web search, and with no ``workdir`` in an
     empty directory rather than hardline's own.
+
+    ``context="clean"`` runs the child without the user's Codex home, in
+    ``workdir`` (a repository's root), and reports what it did and did not
+    remove under ``context``; see ``_validate_clean`` and ``_clean_report``.
     """
     error, workdir = validate_request(
         "codex",
@@ -2848,12 +2967,15 @@ def ask_codex(
         github=github,
         github_exclude=github_exclude,
         github_tools=github_tools,
+        context=context,
     )
     if error is not None:
         return error
     resolution = None
     if resolve_model:
-        model, resolution = resolve_codex_model(model, mode=mode, workdir=workdir)
+        model, resolution = resolve_codex_model(
+            model, mode=mode, workdir=workdir, context=context
+        )
     result = _ask_codex_validated(
         prompt,
         model=model,
@@ -2864,6 +2986,7 @@ def ask_codex(
         on_spawn=on_spawn,
         github=github,
         github_exclude=github_exclude,
+        context=context,
     )
     if resolution is not None:
         # On failure too: "Codex rejected gpt-6-astra" needs to say that the
@@ -2888,6 +3011,7 @@ def _ask_codex_validated(
     on_spawn: "Callable[[int], None] | None",
     github: str | None = None,
     github_exclude: list | None = None,
+    context: str = "default",
 ) -> dict:
     argv = _prefix_for("codex") + ["--ephemeral"]
     # Before anything is spawned, isolation probes included: an invalid timeout
@@ -2920,6 +3044,7 @@ def _ask_codex_validated(
         on_spawn=on_spawn,
         attachment=attachment,
         sandbox=sandbox,
+        context=context,
     )
     if attachment is not None:
         result["github"] = attachment["summary"]
@@ -2952,6 +3077,147 @@ _CODEX_NO_DOCS_NOTE = (
 # A launcher's mtime need not change when Codex updates, so the memory expires.
 _CODEX_NO_DOCS_MEMORY_S = 3600.0
 _codex_docs_refused_by: dict[str, tuple] = {}  # exe -> (mtime_ns or None, monotonic at refusal)
+
+# What a clean context does not remove, said with every result so that no
+# reader takes "clean" for more than it is (reviewed 2026-10-28).
+_CLEAN_NOT_REMOVED = (
+    "system and managed (cloud) configuration layers",
+    "the workdir's own project configuration (.codex/), as Codex's trust rules decide",
+    "skills Codex discovers outside its home (such as ~/.agents/skills, admin and bundled "
+    "skills), following their links, into a Codex home too; of these only ~/.agents is "
+    "denied, and only to its commands",
+    "the environment, less API-provider overrides and credential-named variables",
+    "web search",
+    "writes outside workdir that a workspace-write sandbox allows, such as temporary roots",
+)
+_CLEAN_UNOBSERVED = (
+    "Codex reports no instruction-load telemetry: a file discovered is not proof it was "
+    "loaded, and a thread started is not proof it was read"
+)
+
+
+def _clean_discovery(workdir: str) -> dict:
+    """The instruction files a clean run should get, and the workdir's digest.
+
+    Codex reads one file per directory from the repository root down to the
+    working directory, AGENTS.override.md before AGENTS.md; a clean workdir is
+    the root, so it is this directory's alone. ``expected`` is hardline's
+    reading of that rule, not Codex's word (fallback file names a surviving
+    configuration layer adds are not seen here).
+    """
+    found = []
+    root = Path(workdir).resolve()
+    for name in ("AGENTS.override.md", "AGENTS.md"):
+        path = Path(workdir) / name
+        if path.is_file():
+            if root not in path.resolve().parents:
+                raise ValueError(f"{path} leads outside workdir")
+            data = path.read_bytes()
+            found.append({
+                "path": str(path), "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()
+            })
+    expected = next((f["path"] for f in found if f["bytes"]), None)
+    return {
+        "discovered": {"instructions": found, "expected": expected},
+        "workdir_digest": _tree_digest(workdir),
+    }
+
+
+def _clean_intake(expected: str | None) -> str:
+    """The no-docs retry's preamble for a clean run: the one file, by path.
+
+    The default preamble names the Codex home, whose global AGENTS.md a clean
+    run must not take in; with no file expected there is nothing to ask."""
+    if expected is None:
+        return ""
+    return (
+        "[hardline] Codex could not load AGENTS.md for this run (a Codex defect). Before "
+        f"anything else, read {expected} with your shell and follow it as if it had been "
+        "loaded. Read no other instruction file for this. The request follows.\n\n"
+    )
+
+
+def _clean_report(recorded: dict, env: dict, no_docs: bool, started: bool) -> dict:
+    """``context`` on a clean run's result: what was configured, what hardline
+    found before the run, and what the run itself showed - kept apart.
+
+    ``instructions`` is what was asked of Codex, never what it did: automatic
+    loading (Codex's own rules decide), a shell read of the expected file
+    when Codex could not load it, or nothing when no file was expected then.
+    Whether a thread started at all is the one thing the run shows."""
+    if not no_docs:
+        asked = "automatic_loading_requested"
+    elif recorded["discovered"]["expected"] is not None:
+        asked = "shell_read_requested"
+    else:
+        asked = "none_requested"
+    return {
+        "name": "clean",
+        "configured": {
+            "codex_home": "temporary, holding only auth.json at the start",
+            "ignore_user_config": True,
+            "ignore_rules": "user and project",
+            "denied_whole": [str(path) for path in _clean_denied_whole(env)],
+            "instructions": asked,
+        },
+        "discovered": recorded["discovered"],
+        "observed": {"thread_started": started},
+        "observed_reason": _CLEAN_UNOBSERVED,
+        "not_removed": list(_CLEAN_NOT_REMOVED),
+        "workdir_digest": recorded["workdir_digest"],
+    }
+
+
+def _tree_digest(root: str) -> dict:
+    """``hardline-tree-v1``: what was in ``root`` before a builder touched it.
+
+    One JSON record ``[kind, path, value]`` per entry, sorted by path (``/``
+    separators, relative to root), and the sha256 of those records, one per
+    line: ``f`` with the sha256 of the file's raw bytes, ``d`` for a
+    directory, ``l`` with a link's or junction's target, not followed, so a
+    link out of the tree fingerprints only its target's name. The root's
+    ``.git`` is left out: it is history, not the working tree. Anything else
+    (a socket, a device) raises ValueError rather than being skipped.
+
+    A fingerprint of one walk, not a freeze: a tree changed while it is
+    walked (an entry swapped for a link between its stat and its read) is
+    not detected. The caller's copy must hold still until the builder starts.
+    """
+    records = []
+    totals = {"files": 0, "bytes": 0, "links": 0}
+
+    def walk(directory: str, prefix: str) -> None:
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if not prefix and entry.name == ".git":
+                    continue
+                path = prefix + entry.name
+                info = entry.stat(follow_symlinks=False)
+                if _is_link(info):
+                    records.append(["l", path, os.readlink(entry.path)])
+                    totals["links"] += 1
+                elif stat.S_ISDIR(info.st_mode):
+                    records.append(["d", path, ""])
+                    walk(entry.path, path + "/")
+                elif stat.S_ISREG(info.st_mode):
+                    digest = hashlib.sha256()
+                    with open(entry.path, "rb") as handle:
+                        for block in iter(lambda: handle.read(1 << 20), b""):
+                            digest.update(block)
+                            totals["bytes"] += len(block)
+                    records.append(["f", path, digest.hexdigest()])
+                    totals["files"] += 1
+                else:
+                    raise ValueError(f"{path} is neither a file, a directory nor a link")
+
+    walk(root, "")
+    lines = "".join(json.dumps(r, ensure_ascii=True) + "\n" for r in sorted(records, key=lambda r: r[1]))
+    return {
+        "scheme": "hardline-tree-v1",
+        "sha256": hashlib.sha256(lines.encode("ascii")).hexdigest(),
+        **totals,
+        "excluded": [".git"],
+    }
 
 
 def _modified(exe: str) -> int | None:
@@ -2990,10 +3256,13 @@ def _ask_codex_structured(
     on_spawn: "Callable[[int], None] | None",
     attachment: dict | None,
     sandbox: _CodexSandbox,
+    context: str = "default",
 ) -> dict:
     """The telemetry path; ``argv`` is the resolved ``codex exec --ephemeral``
     with ``sandbox``'s overrides."""
     exe = argv[0]
+    clean = context == "clean"
+    recorded = None
     if model is not None:
         argv += ["--model", model]
     argv.append("--json")
@@ -3024,6 +3293,20 @@ def _ask_codex_structured(
         run_cwd = str(Path(neutral_root) / "workspace")
         skip_git_check = True
         argv += ["--ignore-user-config", "--ignore-rules", "-C", run_cwd]
+    elif clean:
+        # First, before this call writes or runs anything (its home, its
+        # probes): nothing it does is in the digest.
+        try:
+            recorded = _clean_discovery(workdir)
+        except (OSError, ValueError) as exc:
+            return {"ok": False, "error": f"clean context cannot record its workdir: {exc}"}
+        error, child_env, neutral_root = _prepare_codex_advisory(clean=True)
+        if error is not None:
+            return error
+        subscription_configured = True
+        # The marker pinned too: a surviving layer could otherwise move the
+        # project root above workdir, and with it the instructions that apply.
+        argv += ["--ignore-user-config", "--ignore-rules", "-c", 'project_root_markers=[".git"]']
     instructions = []
     if mode == "advisory":
         instructions.append(_CODEX_ADVISORY_DEVELOPER_INSTRUCTIONS)
@@ -3052,12 +3335,12 @@ def _ask_codex_structured(
     child_env = {**(os.environ if child_env is None else child_env), **sandbox.env}
     try:
         try:
-            pin = _codex_pin(sandbox, write, child_env, run_cwd)
+            pin = _codex_pin(sandbox, write, child_env, run_cwd, clean)
         except ValueError as exc:
             return {"ok": False, "error": str(exc)}
         if sandbox.profile:
             started = _codex_sandbox_started(
-                exe, sandbox.overrides + pin, child_env, run_cwd, on_spawn
+                exe, sandbox.overrides + pin, child_env, run_cwd, on_spawn, clean
             )
             if started.get("cancelled"):
                 return started
@@ -3082,9 +3365,12 @@ def _ask_codex_structured(
         if refusal is not None:
             return refusal
         argv += isolation
+        intake = _CODEX_NO_DOCS_INTAKE
+        if clean:
+            intake = _clean_intake(recorded["discovered"]["expected"])
 
         def spawn(no_docs: bool) -> dict:
-            tail = _CODEX_NO_DOCS + ["--", _CODEX_NO_DOCS_INTAKE + prompt] if no_docs else ["--", prompt]
+            tail = _CODEX_NO_DOCS + ["--", intake + prompt] if no_docs else ["--", prompt]
             return _run_agent_cmd(
                 "codex",
                 argv + tail,
@@ -3105,10 +3391,20 @@ def _ask_codex_structured(
     finally:
         if neutral_root:
             shutil.rmtree(neutral_root, ignore_errors=True)
+    # From the stream itself: the reduced result drops the thread id when a
+    # run times out or fails after its thread started.
+    started = _thread_started(run.get("reply") if run.get("ok") else run.get("_stdout"))
     result = _codex_outcome(run, model, effort, subscription_configured)
-    if no_docs:
+    if no_docs and (recorded is None or recorded["discovered"]["expected"] is not None):
         result["instructions_note"] = _CODEX_NO_DOCS_NOTE
+    if recorded is not None:
+        result["context"] = _clean_report(recorded, child_env, no_docs, started)
     return result
+
+
+def _thread_started(output: str | None) -> bool:
+    events = _parse_jsonl_events(output or "")[0]
+    return any(e.get("type") == "thread.started" for e in events)
 
 
 def _codex_outcome(run: dict, model: str | None, effort: str, subscription_configured) -> dict:

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        if clean:\n            intake = _clean_intake(recorded[\"discovered\"][\"expected\"])\n",
+  "after": "        if clean:\n            recorded = _clean_discovery(run_cwd)\n            intake = _clean_intake(recorded[\"discovered\"][\"expected\"])\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_the_digest_is_taken_before_the_calls_own_writes"
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "file": "hardline_mcp/server.py",
-  "before": "                ),\n                **github_kwargs,\n            )",
-  "after": "                ),\n            )",
+  "before": "                ),\n                **contextual,\n                **github_kwargs,\n            )",
+  "after": "                ),\n                **contextual,\n            )",
   "tests": [
     "tests/test_github_forwarding.py::test_async_codex_forwards_github_and_records_only_the_reference",
     "tests/test_github_forwarding.py::test_async_claude_through_the_guard_forwards_github"

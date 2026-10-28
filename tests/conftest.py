@@ -243,7 +243,7 @@ def _no_codex_isolation_probes(monkeypatch, request):
     monkeypatch.setattr(
         adapters,
         "_codex_sandbox_started",
-        lambda exe, overrides, env, cwd, on_spawn=None: {"ok": True},
+        lambda exe, overrides, env, cwd, on_spawn=None, clean=False: {"ok": True},
     )
 
 

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/server.py",
+  "before": "                ),\n                **contextual,\n",
+  "after": "                ),\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_async_codex_carries_the_context_to_the_worker"
+  ]
+}

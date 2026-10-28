@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "                    records.append([\"d\", path, \"\"])\n",
+  "after": "                    pass\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_an_empty_directory_is_part_of_the_tree"
+  ]
+}

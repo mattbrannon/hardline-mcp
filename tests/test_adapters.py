@@ -955,7 +955,7 @@ def test_a_denial_codex_cannot_be_given_exactly_refuses_the_call(
 ):
     """Dropped, or read by Codex as a glob matching something else, the entry
     would hand over what the caller believes is denied."""
-    monkeypatch.setattr(adapters, "_codex_unreadable", lambda env: [tmp_path / name])
+    monkeypatch.setattr(adapters, "_codex_unreadable", lambda env, clean=False: [tmp_path / name])
     calls = _capture_run(monkeypatch, _FakeCompleted(stdout=_codex_reply("codex reply")))
     out = adapters.ask_codex("summarize")
     assert out["ok"] is False
@@ -971,8 +971,10 @@ def sandbox_probe(monkeypatch):
         calls = []
         result = {"ok": True}
 
-    def started(exe, overrides, env, cwd, on_spawn=None):
-        Probe.calls.append({"exe": exe, "overrides": overrides, "env": env, "cwd": cwd})
+    def started(exe, overrides, env, cwd, on_spawn=None, clean=False):
+        Probe.calls.append(
+            {"exe": exe, "overrides": overrides, "env": env, "cwd": cwd, "clean": clean}
+        )
         return Probe.result
 
     monkeypatch.setattr(adapters, "_codex_sandbox_started", started)

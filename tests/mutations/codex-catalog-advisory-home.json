@@ -1,6 +1,6 @@
 {
   "file": "hardline_mcp/adapters.py",
-  "before": "        error, env, neutral_root = _prepare_codex_advisory()\n        if error is not None:\n            return None, error[\"error\"]\n        cwd = str(Path(neutral_root) / \"workspace\")",
+  "before": "        error, env, neutral_root = _prepare_codex_advisory(clean=context == \"clean\")\n        if error is not None:\n            return None, error[\"error\"]\n        cwd = workdir if context == \"clean\" else str(Path(neutral_root) / \"workspace\")",
   "after": "        env, cwd = dict(os.environ), None\n        _strip_codex_api_overrides(env)",
   "tests": [
     "tests/test_model_resolution.py::test_advisory_lookup_runs_in_an_isolated_home"

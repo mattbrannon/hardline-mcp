@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "                exe, sandbox.overrides + pin, child_env, run_cwd, on_spawn, clean\n",
+  "after": "                exe, sandbox.overrides + pin, child_env, run_cwd, on_spawn\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_the_sandbox_check_proves_the_whole_denial"
+  ]
+}
