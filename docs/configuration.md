@@ -414,6 +414,7 @@ available execution metadata:
 | Default (`write=False`) | Explicit read-only sandbox, as a permission profile that also denies secrets (under MXC on Windows); ephemeral session. | Denies Edit/Write/NotebookEdit and discards user settings; Bash remains available. |
 | `mode="advisory"` | Fresh neutral workspace and temporary config/auth home; read-only sandbox and fixed developer instructions. | Fresh neutral workspace; tools, slash commands, project customizations, and persistence disabled. |
 | `write=True` | `workspace-write` sandbox with approvals disabled. | Full tool access with `bypassPermissions`. |
+| `context="clean"` | Default or `write=True` in `workdir`, without the user's Codex home; see [Clean context](#clean-context-codex). | Not available. |
 
 **Claude's default read mode is not a filesystem sandbox.** Its command
 classifier may block direct writes while allowing side effects from builds,
@@ -459,6 +460,105 @@ Bedrock/Vertex/Foundry overrides. After execution they require runtime telemetry
 showing first-party account authentication (`apiKeySource: none`) without
 overage, and report `subscription_verified`. A failed post-call check cannot
 undo a request already made by a misconfigured wrapper.
+
+### Clean context (Codex)
+
+`context="clean"` on `ask_codex` and `ask_codex_async` runs Codex without the
+user's Codex home, in `workdir`, and composes with `write=True`. It is for a
+builder that must start from declared files only, such as a construction
+trial run on a frozen copy:
+
+```text
+ask_codex(prompt="...", workdir="/abs/frozen-copy", write=True,
+          context="clean", model="gpt-6-astra", effort="high")
+```
+
+**What it removes:**
+- Codex runs from a temporary `CODEX_HOME` holding only `auth.json`, so it
+  does not load the user's config, `AGENTS.md`, skills or memories from their
+  Codex home. A skill linked from a directory it still searches, such as
+  `~/.agents/skills`, is the exception (see below). ChatGPT auth is required,
+  and checked when the call is admitted.
+- User config is ignored (`--ignore-user-config`), and so are user and project
+  execution rules (`--ignore-rules`). API-provider overrides are stripped.
+- `project_root_markers` is pinned to `.git`, so no surviving configuration
+  layer can move the project root above `workdir`.
+- The user's Codex homes (`~/.codex`, and `CODEX_HOME` if it is set elsewhere)
+  and `~/.agents` are unreadable to Codex's commands, the `AGENTS.md` and
+  `skills` that other calls leave readable included. A home relocated anywhere
+  else is not known to hardline.
+- Instructions come from `workdir` alone. If Codex 0.164 cannot load them
+  under the sandbox, the retry names that one file instead of pointing at the
+  Codex home.
+
+**It refuses** rather than run:
+- in advisory mode;
+- without `workdir`;
+- when `workdir` is not a repository root with a `.git` directory of its own,
+  meaning exactly `.git`, not a link, and containing a `HEAD`, since
+  instructions and project settings above it would otherwise apply;
+- under a Windows sandbox that denies no reads (`elevated`, `unelevated`,
+  `inherit`);
+- inside a Codex home or `~/.agents`, or in a `workdir` that contains one;
+- when `AGENTS.md` or `AGENTS.override.md` is a link leading outside
+  `workdir`.
+
+It is Codex only. Claude clean writes wait until removing memory and keeping
+hooks are shown together.
+
+**It does not remove, and says so** in every result (`context.not_removed`):
+- system and managed (cloud) configuration;
+- the frozen copy's own `.codex/` configuration, as Codex's trust rules
+  decide;
+- skills Codex discovers outside its home, such as `~/.agents/skills` or admin
+  and bundled skills. Codex follows their links, including links into a Codex
+  home. Of these, only `~/.agents` is denied, and only to Codex's commands;
+- the environment;
+- web search;
+- writes a workspace-write sandbox allows outside `workdir`.
+
+It is not filesystem confinement.
+
+**The result's `context`** keeps four things apart:
+- `configured`: what hardline asked for. Its `instructions` field is one of:
+  - `automatic_loading_requested`: Codex's own rules decide what it loads.
+  - `shell_read_requested`: Codex could not load the expected file, so the
+    model was asked to read it.
+  - `none_requested`: Codex could not load instructions and there was no
+    file to point it at.
+- `discovered`: the instruction files found in `workdir` with their sha256,
+  and the one hardline expects Codex to load.
+- `observed`: only whether a Codex thread started, read from Codex's event
+  stream even when the run then failed or timed out, with the reason nothing
+  more can be shown. Codex reports no instruction loading, a file found is not
+  a file loaded, and a started thread is not a file read.
+- `workdir_digest`: taken first, before the call creates its home or runs its
+  sandbox and isolation checks, so it describes what the builder started
+  from. For an async job that is when the job runs, not when it was admitted.
+
+A call refused before Codex starts has no `context`: nothing ran.
+
+The digest (`hardline-tree-v1`) is the sha256 of one sorted record per entry:
+- files by the hash of their raw bytes, so line endings count;
+- directories, empty ones included;
+- links and junctions by their target, never followed;
+- ignored files included;
+- the root's `.git` left out.
+
+An entry that is none of these refuses the call. On Windows, every reparse
+point counts as a link, so a copy holding cloud placeholders (OneDrive) or
+other reparse points that are not links is refused. Make the frozen copy
+outside a synced folder.
+
+Equal digests are not equal builder inputs. The digest records no permission
+bits, so `chmod +x` does not change it. It also leaves out `.git`, and with it
+the repository's config and hooks.
+
+The digest fingerprints one walk; it does not freeze the tree. A tree that
+changes while it is hashed goes undetected, so the copy must hold still until
+the builder starts. Large trees, ignored dependency folders included, are
+hashed in full with no time limit, and cancelling an async job does not stop
+a hash already under way.
 
 ## GitHub evidence for reviews
 

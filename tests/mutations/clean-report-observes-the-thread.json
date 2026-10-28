@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        \"observed\": {\"thread_started\": started},\n",
+  "after": "        \"observed\": {\"thread_started\": True},\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_a_run_that_never_started_says_so"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if mode == \"advisory\" or context == \"clean\":\n",
+  "after": "    if mode == \"advisory\":\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_family_names_resolve_in_the_clean_home"
+  ]
+}

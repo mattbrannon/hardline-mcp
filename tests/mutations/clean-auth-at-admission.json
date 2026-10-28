@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if _codex_auth_mode(dict(os.environ)) != \"chatgpt\":\n        return refuse(\"requires ChatGPT account authentication\")\n",
+  "after": "",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_async_admission_refuses_clean_without_chatgpt_auth"
+  ]
+}

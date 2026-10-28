@@ -78,6 +78,7 @@ ClaudeEffort = Literal["default", "low", "medium", "high", "xhigh", "max"]
 ClaudeMode = Literal["default", "advisory"]
 CodexEffort = Literal["default", "low", "medium", "high", "xhigh", "max", "ultra"]
 CodexMode = Literal["default", "advisory"]
+CodexContext = Literal["default", "clean"]
 GithubTools = Literal["none", "read"]
 
 # ask_*_async fire real ask_claude/ask_codex subprocess calls (each bounded by
@@ -2269,6 +2270,7 @@ async def ask_codex(
     write: bool = False,
     github: str | None = None,
     github_exclude: list[str] | None = None,
+    context: CodexContext = "default",
     ctx: Context | None = None,
 ) -> dict:
     """Ask Codex a question and wait for its reply.
@@ -2307,6 +2309,17 @@ async def ask_codex(
     read-only. Codex JSONL does not currently report served model/effective
     effort, so those telemetry fields remain null rather than being guessed.
 
+    ``context="clean"`` runs Codex without the user's Codex home: a temporary
+    one holding only auth.json, user config and rules ignored, and every user
+    Codex home and ``~/.agents`` unreadable to its commands. It composes with
+    ``write=True``; ``workdir`` must be a repository's root (its own ``.git``)
+    and is where instructions come from. Refused in advisory mode and under a
+    Windows sandbox that denies no reads. The result's ``context`` separates
+    what was configured, what instruction files hardline found, what the run
+    showed (only whether a thread started: Codex reports no loading), what
+    clean does NOT remove, and a digest of ``workdir`` taken just before the
+    run.
+
     ``github`` gives the reviewer a pull request it could not otherwise reach:
     ``"owner/repo#123"``, ``"owner/repo#123@<head sha>"``, or a ``snapshot_id``
     from ``github_snapshot``. Hardline collects metadata and the per-file diff
@@ -2340,6 +2353,7 @@ async def ask_codex(
         write=write,
         github=github,
         github_exclude=github_exclude,
+        context=context,
     )
     return _hinted("codex", model, result)
 
@@ -2837,6 +2851,7 @@ def _admit_async(
     github: str | None = None,
     github_exclude: list | None = None,
     github_tools: str = "none",
+    context: str = "default",
 ) -> dict:
     """Validate, reserve capacity, and publish a durable receipt without waiting."""
     known = adapters.known_agents()
@@ -2859,10 +2874,13 @@ def _admit_async(
         mode=mode,
         workdir=workdir,
         write=write,
+        context=context,
         **github_kwargs,
     )
     if error:
         return {**error, "accepted": False, "dispatched": False}
+    # Only a clean context travels further: a Claude ask takes no such keyword.
+    contextual = {"context": context} if context != "default" else {}
     if not prompt.strip():
         return {
             "ok": False,
@@ -2892,7 +2910,7 @@ def _admit_async(
             # full pool spawns no lookups. The worker is told not to look
             # again: a catalog that changed in between must not re-decide.
             model, resolution = adapters.resolve_codex_model(
-                model, mode=mode, workdir=workdir
+                model, mode=mode, workdir=workdir, **contextual
             )
             extra_ask_kwargs = {**(extra_ask_kwargs or {}), "resolve_model": False}
         # One critical section from the recipient to the job, so neither a
@@ -2917,6 +2935,7 @@ def _admit_async(
                         "mode": mode,
                         "workdir": workdir,
                         "write": write,
+                        **contextual,
                         **_github_request(github, github_exclude, github_tools),
                         **({"routing": routing} if routing is not None else {}),
                         **({"model_resolution": resolution} if resolution else {}),
@@ -2974,6 +2993,7 @@ def _admit_async(
                 on_spawn=lambda pid: jobs.set_child_pid(
                     job_id, pid, started_key=jobs.process_key(pid), db_path=db_path
                 ),
+                **contextual,
                 **github_kwargs,
             )
             if ask_fn is _ask_claude_with_reserve_guard:
@@ -3051,6 +3071,7 @@ async def ask_codex_async(
     write: bool = False,
     github: str | None = None,
     github_exclude: list[str] | None = None,
+    context: CodexContext = "default",
 ) -> dict:
     """Dispatch a Codex task in the background; returns immediately.
 
@@ -3068,6 +3089,8 @@ async def ask_codex_async(
     is on the receipt or refusal, and on ``job_status`` and ``job_result``.
     ``github``/``github_exclude`` as for ``ask_codex``; the evidence is
     collected when the job runs, and ``job_cancel`` reaches that collection.
+    ``context`` as for ``ask_codex``; the workdir digest is taken when the
+    job runs, so it describes what the builder started from.
     """
     return await _in_thread(
         _ask_async_impl,
@@ -3083,6 +3106,7 @@ async def ask_codex_async(
         write=write,
         github=github,
         github_exclude=github_exclude,
+        context=context,
     )
 
 

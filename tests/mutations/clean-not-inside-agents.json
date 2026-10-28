@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    homes = [Path.home() / \".codex\", Path.home() / \".agents\"]\n",
+  "after": "    homes = [Path.home() / \".codex\"]\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_clean_cannot_run_inside_the_users_default_homes"
+  ]
+}

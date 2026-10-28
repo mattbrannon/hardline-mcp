@@ -1,0 +1,9 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "        whole = _clean_denied_whole(env)\n",
+  "after": "        whole = []\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_clean_denies_the_users_homes_whole",
+    "tests/test_codex_clean_context.py::test_the_pin_carries_the_whole_denial"
+  ]
+}

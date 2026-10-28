@@ -1,0 +1,8 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    started = _thread_started(run.get(\"reply\") if run.get(\"ok\") else run.get(\"_stdout\"))\n",
+  "after": "    started = _thread_started(run.get(\"reply\"))\n",
+  "tests": [
+    "tests/test_codex_clean_context.py::test_a_thread_that_started_is_seen_though_the_run_failed"
+  ]
+}
