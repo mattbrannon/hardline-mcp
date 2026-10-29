@@ -613,14 +613,14 @@ def derived_lane_suffix() -> str:
     the environment at all, and every one of them shared the unqualified name
     ``codex``.
 
-    It can come from the PROCESS. Each session spawns its own hardline over
-    stdio, so the thing that spawned this one IS the session: its pid paired
-    with its creation time is unique, stable for as long as the session lives,
-    and needs no cooperation from the agent whatsoever. That is
-    ``parent_lane_suffix``.
+    It can come from the PROCESS. Codex can spawn several MCP connections
+    under one host, so each uses its own server PID and creation token for
+    the automatic address. Other hosts retain their launcher-derived lane.
+    Both are supplied by ``parent_lane_suffix``; explicit names survive a
+    reconnect through the existing claim and restoration rules.
 
     Order: an explicit ``HARDLINE_AGENT_LABEL`` pin, then a session id the host
-    supplied, then the parent. Earlier entries are better only because they
+    supplied, then the process anchor. Earlier entries are better only because they
     survive more: a Claude session id outlives a ``/mcp`` reconnect, where the
     parent-derived lane does not change either - the parent is the same process
     - but a full restart is a new session under both.
@@ -680,7 +680,7 @@ _session_anchor: list[dict] = []
 
 
 def _anchor() -> dict:
-    """Identity of the process that spawned this one: {lane, agent}.
+    """Automatic lane, agent and launching host captured for this server.
 
     Empty strings for either where the answer is not knowable. A guessed
     identity is worse than none, because the registry treats a lane as a
@@ -709,16 +709,19 @@ def _compute_anchor() -> dict:
         above = hosts = chain[:3]
     if any(_launcher_name(p.image) in _NESTED_LAUNCHERS for p in above):
         return blank
-    token = procid.identity_token(launcher.pid, launcher.key)
     name = Path.cwd().name
     host = next(
         (p for p in hosts if _launcher_name(p.image) in _AGENT_BY_LAUNCHER), launcher
     )
-    # Preserve the parent-derived address, but bind lifetime to the actual
-    # agent host when a persistent launcher sits between it and this server.
+    agent = _AGENT_BY_LAUNCHER.get(_launcher_name(host.image), "")
+    if agent == "codex" or os.environ.get("HARDLINE_AGENT", "").strip().lower() == "codex":
+        token = procid.identity_token(*procid.current_identity())
+    else:
+        token = procid.identity_token(launcher.pid, launcher.key)
+    # Lifetime follows the agent host even when the address names this server.
     return {
         "lane": f"{name}.{token}" if name and token else token or "",
-        "agent": _AGENT_BY_LAUNCHER.get(_launcher_name(host.image), ""),
+        "agent": agent,
         "host_pid": host.pid,
         "host_key": host.key,
     }
@@ -742,7 +745,7 @@ def _launcher_name(image: str) -> str:
 
 
 def parent_lane_suffix() -> str:
-    """The lane this process's launcher implies, or ""."""
+    """The automatic lane from this server's process anchor, or ""."""
     return _anchor()["lane"]
 
 

@@ -95,6 +95,9 @@ lists registered destinations. Check each session's `liveness` and any
 - Recognized hosts register automatically. Use `register_session` for a memorable
   role or when identity cannot be inferred. A live or unverifiable holder blocks
   takeover; changing your name retains your earlier lanes until released.
+- Codex automatic addresses belong to individual MCP server processes, so
+  connections sharing one Codex host can each register and receive mail. Use a
+  named project address for continuity across reconnects.
 - After a relaunch or `/mcp` reconnect, a Claude Code conversation gets its own
   lane back by itself, once the old server has exited. Names it claimed are not
   taken back for it: `list_agents().you.previously_held` lists them with their

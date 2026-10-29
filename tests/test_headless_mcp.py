@@ -14,6 +14,7 @@ import importlib.metadata
 import json
 import os
 import sys
+from contextlib import AsyncExitStack
 from pathlib import Path
 
 import anyio
@@ -56,6 +57,46 @@ def _tool_dict(result) -> dict:
         if text:
             return json.loads(text)
     raise AssertionError(f"no structured/text content in tool result: {result!r}")
+
+
+@pytest.mark.anyio
+async def test_codex_siblings_can_claim_and_receive_their_own_mail(tmp_path):
+    params = _params(tmp_path / "shared.db")
+    params.env["HARDLINE_AGENT"] = "codex"
+    params.cwd = str(tmp_path)
+    params.env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    with anyio.fail_after(60):
+        async with AsyncExitStack() as stack:
+            clients, derived, lanes = [], [], []
+            for label in ("first-project", "second-project"):
+                read, write = await stack.enter_async_context(stdio_client(params))
+                client = await stack.enter_async_context(ClientSession(read, write))
+                await client.initialize()
+                roster = _tool_dict(await client.call_tool("list_agents", {}))
+                derived.append(roster["you"]["lane_suffix"])
+                assert "registration_warning" not in roster, roster
+                claimed = _tool_dict(await client.call_tool(
+                    "register_session", {"label": label, "agent": "codex"}
+                ))
+                assert claimed["ok"], claimed
+                clients.append(client)
+                lanes.append(claimed["lane"])
+            assert derived[0] and derived[1] and derived[0] != derived[1]
+            sent = _tool_dict(await clients[0].call_tool("send", {
+                "from_agent": "codex", "to_agent": lanes[1],
+                "message": "for the second connection", "deliver": False,
+            }))
+            assert sent["ok"], sent
+            first = _tool_dict(await clients[0].call_tool("inbox", {"agent": "codex"}))
+            assert first["messages"] == []
+            assert not _tool_dict(await clients[0].call_tool(
+                "ack", {"message_id": sent["message_id"]}
+            ))["ok"]
+            second = _tool_dict(await clients[1].call_tool("inbox", {"agent": "codex"}))
+            assert [message["body"] for message in second["messages"]] == [
+                "for the second connection"
+            ]
+            assert second["messages"][0]["sender"] == lanes[0]
 
 
 @pytest.mark.anyio

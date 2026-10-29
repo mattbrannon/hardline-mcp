@@ -1,0 +1,10 @@
+{
+  "file": "hardline_mcp/adapters.py",
+  "before": "    if agent == \"codex\" or os.environ.get(\"HARDLINE_AGENT\", \"\").strip().lower() == \"codex\":\n        token = procid.identity_token(*procid.current_identity())\n    else:\n        token = procid.identity_token(launcher.pid, launcher.key)",
+  "after": "    token = procid.identity_token(launcher.pid, launcher.key)",
+  "tests": [
+    "tests/test_identity.py::test_codex_connections_without_launchers_have_separate_lanes",
+    "tests/test_identity.py::test_codex_without_a_server_token_does_not_use_the_shared_host_lane",
+    "tests/test_headless_mcp.py::test_codex_siblings_can_claim_and_receive_their_own_mail"
+  ]
+}

@@ -22,12 +22,13 @@ instead of at startup, so silent servers are never offered as destinations.
   grants the name to whoever claims it, and a label may be any generated
   suffix (`adapters.validate_label`). The repo rule is that new checks narrow
   that gap, never widen it.
-- **On POSIX, siblings share a lane.** The token hashes the first ancestor.
+- **At review, POSIX siblings shared a lane.** The token hashed the first ancestor.
   On Windows that is each server's own `hardline-mcp.exe` launcher; on POSIX
   it is the `codex` process, so every server it spawns in one cwd derives the
   same lane. Today the top-level server registers first. Deferred, whichever
   sibling calls first wins, and the top-level session's first call comes back
-  `contested`.
+  `contested`. Codex automatic lanes now hash each server's identity, fixing
+  this collision without deferring registration. The other objections remain.
 - **Mail is lost by the delay after all.** A sender who cannot see a silent
   session falls back to bare `codex`, whose one copy any Codex session
   consumes. Today it could address the session's lane, read at its first
