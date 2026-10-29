@@ -261,7 +261,7 @@ def test_anchor_retains_verified_host_token_after_probe_failure(tmp_path, monkey
     host = adapters.host_identity()
     assert host == {"host_pid": host_pid, "host_key": "host"}
     assert adapters.parent_lane_suffix().endswith(
-        procid.identity_token(host_pid, "host")
+        procid.identity_token(*procid.current_identity())
     )
     assert sessions.register(agent="codex", lane="codex:role", db_path=db, **host)["ok"]
     # A later occupant of the same PID must not keep the original host's lanes.
@@ -345,7 +345,9 @@ def test_known_host_survives_an_unverifiable_wrapper(monkeypatch):
     )
     assert adapters.host_identity() == {"host_pid": 10002, "host_key": "host"}
     assert adapters.parent_agent() == "codex"
-    assert adapters.parent_lane_suffix() == ""
+    assert adapters.parent_lane_suffix().endswith(
+        procid.identity_token(*procid.current_identity())
+    )
 
 
 @pytest.mark.parametrize("later_parent", [None, 99999])
@@ -598,15 +600,38 @@ def test_the_console_script_launcher_is_not_the_session(monkeypatch):
 
 
 def test_codex_threads_under_one_daemon_share_a_host_not_a_lane(monkeypatch):
-    """Every Codex thread the app-server daemon runs is a child of the one
-    daemon, so only the launcher tells two of them apart."""
+    """Windows launchers and direct POSIX children both need distinct lanes."""
     seen = []
     for launcher in (10001, 10011):
-        _process_table(monkeypatch, [("hardline-mcp.exe", launcher), ("codex.exe", 19844)])
-        seen.append((adapters.parent_agent(), adapters.host_identity()["host_pid"]))
-        seen.append(adapters.parent_lane_suffix())
+        with monkeypatch.context() as patch:
+            patch.setattr(os, "getpid", lambda: launcher + 20000)
+            _process_table(patch, [("hardline-mcp.exe", launcher), ("codex.exe", 19844)])
+            seen.append((adapters.parent_agent(), adapters.host_identity()["host_pid"]))
+            seen.append(adapters.parent_lane_suffix())
     assert seen[0] == seen[2] == ("codex", 19844)
     assert seen[1] and seen[3] and seen[1] != seen[3]
+
+
+def test_codex_connections_without_launchers_have_separate_lanes(monkeypatch):
+    seen = []
+    for pid in (30001, 30002):
+        with monkeypatch.context() as patch:
+            patch.setattr(os, "getpid", lambda: pid)
+            keys = _process_table(patch, [("codex", 19844)])
+            seen.append(adapters.parent_lane_suffix())
+            assert adapters.parent_agent() == "codex"
+            assert adapters.host_identity() == {
+                "host_pid": 19844, "host_key": keys[19844]
+            }
+    assert seen[0] and seen[1] and seen[0] != seen[1]
+
+
+def test_codex_without_a_server_token_does_not_use_the_shared_host_lane(monkeypatch):
+    keys = _process_table(monkeypatch, [("codex", 19844)])
+    keys[os.getpid()] = None
+    assert adapters.parent_agent() == "codex"
+    assert adapters.parent_lane_suffix() == ""
+    assert adapters.host_identity() == {"host_pid": 19844, "host_key": keys[19844]}
 
 
 def test_a_hardline_an_agent_child_starts_is_still_nested(monkeypatch):
